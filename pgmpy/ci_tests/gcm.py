@@ -78,8 +78,6 @@ class GCM(_BaseCITest):
             The second variable for testing the independence condition X ⊥⊥ Y | Z.
         Z : list
             A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
-        data : pandas.DataFrame
-            The dataset in which to test the independence condition.
         **kwargs
             Additional arguments.
 

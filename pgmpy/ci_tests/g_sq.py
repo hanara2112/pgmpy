@@ -1,3 +1,5 @@
+import pandas as pd
+
 from .power_divergence import PowerDivergence
 
 
@@ -19,9 +21,6 @@ class GSq(PowerDivergence):
         A list of variable names contained in the data set, different from X and Y.
         This is the separating set that (potentially) makes X and Y independent.
         Default: []
-
-    data: pandas.DataFrame
-        The dataset on which to test the independence condition.
 
     boolean: bool
         If boolean=True, an additional argument `significance_level` must be
@@ -65,5 +64,5 @@ class GSq(PowerDivergence):
         "requires_data": True,
     }
 
-    def __init__(self, data):
+    def __init__(self, data: pd.DataFrame):
         super().__init__(data=data, lambda_="log-likelihood")

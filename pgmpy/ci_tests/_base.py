@@ -44,7 +44,7 @@ class _BaseCITest(BaseObject):
         boolean: bool = True,
         significance_level: float = 0.05,
         **kwargs,
-    ) -> Union[bool, Tuple[float, float]]:
+    ) -> Union[bool, Tuple[float, ...]]:
         """
         Perform the conditional independence test.
 
@@ -57,8 +57,6 @@ class _BaseCITest(BaseObject):
         Z : list or array-like, optional
             A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
             Default is None, which is treated as an empty list.
-        data : pandas.DataFrame, optional
-            The dataset in which to test the independence condition.
         boolean : bool, default=True
             If True, returns a boolean indicating independence (p-value >= significance_level).
             If False, returns the test statistic and p-value.
@@ -82,18 +80,19 @@ class _BaseCITest(BaseObject):
         Z = [] if Z is None else list(Z)
         self._validate_inputs(X, Y, Z)
 
-        stat, p_value = self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
+        result = self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
+
+        # p_value is always second element
+        p_value = result[1]
 
         if boolean:
             return p_value >= significance_level
-        return stat, p_value
+
+        return result
 
     def _validate_inputs(self, X, Y, Z):
         if X == Y:
             raise ValueError("X and Y must be different variables.")
-
-        if not hasattr(Z, "__iter__"):
-            raise ValueError(f"Z must be iterable. Got {type(Z)}")
 
         if self.get_tag("requires_data"):
             if not hasattr(self, "data") or not isinstance(self.data, pd.DataFrame):
@@ -111,7 +110,7 @@ class _BaseCITest(BaseObject):
         Y: str,
         Z: list,
         **kwargs,
-    ) -> Tuple[float, float]:
+    ) -> Tuple[float, ...]:
         raise NotImplementedError
 
 

@@ -78,19 +78,17 @@ class PearsonrEquivalence(_BaseCITest):
             The second variable for testing the independence condition X _|_ Y | Z.
         Z : list
             A list of conditional variables for testing the condition X _|_ Y | Z.
-        data : pandas.DataFrame
-            The dataset in which to test the independence condition.
         **kwargs
             Additional arguments.
 
         Returns
         -------
         tuple
-            A tuple of (Fisher Z-transformed partial correlation, p-value).
+            A tuple of (partial correlation, p-value).
         """
         data = self.data
         # Step 2: Compute Partial Pearson Correlation and clip values to avoid infinities
-        rho, _ = self._pearsonr_test._compute_statistic(X, Y, Z, boolean=False)
+        rho, _ = self._pearsonr_test.test(X, Y, Z, boolean=False)
         rho = np.clip(rho, -0.999999, 0.999999)
 
         # Step 3: Fisher Z-Transformation

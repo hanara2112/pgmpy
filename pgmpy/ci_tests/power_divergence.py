@@ -100,17 +100,6 @@ class PowerDivergence(_BaseCITest):
         self.lambda_ = lambda_
         super().__init__()
 
-    def test(self, X, Y, Z=None, boolean=True, significance_level=0.05, **kwargs):
-        Z = [] if Z is None else list(Z)
-        self._validate_inputs(X, Y, Z)
-
-        chi, p_value, dof = self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
-
-        if boolean:
-            return p_value >= significance_level
-
-        return chi, p_value, dof
-
     def _compute_statistic(
         self,
         X: str,
@@ -129,8 +118,6 @@ class PowerDivergence(_BaseCITest):
             The second variable for testing the independence condition X ⊥⊥ Y | Z.
         Z : list
             A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
-        data : pandas.DataFrame
-            The dataset in which to test the independence condition.
         **kwargs
             Additional arguments.
 
