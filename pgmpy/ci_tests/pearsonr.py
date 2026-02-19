@@ -16,24 +16,8 @@ class Pearsonr(_BaseCITest):
 
     Parameters
     ----------
-    X : str
-        The first variable for testing the independence condition X ⊥⊥ Y | Z.
-
-    Y : str
-        The second variable for testing the independence condition X ⊥⊥ Y | Z.
-
-    Z : list or array-like
-        A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
-
     data : pandas.DataFrame
         The dataset in which to test the independence condition.
-
-    boolean : bool, default=True
-        If True, returns a boolean indicating independence (based on `significance_level`).
-        If False, returns the test statistic and p-value.
-
-    **kwargs
-        Additional arguments. Must contain `significance_level` if `boolean=True`.
 
     Returns
     -------
@@ -76,11 +60,6 @@ class Pearsonr(_BaseCITest):
             The second variable for testing the independence condition X ⊥⊥ Y | Z.
         Z : list
             A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
-        data : pandas.DataFrame
-            The dataset in which to test the independence condition.
-        **kwargs
-            Additional arguments.
-
         Returns
         -------
         tuple

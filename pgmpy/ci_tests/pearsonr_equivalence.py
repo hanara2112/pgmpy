@@ -17,20 +17,8 @@ class PearsonrEquivalence(_BaseCITest):
 
     Parameters
     ----------
-    X: str
-        The first variable for testing the independence condition X _|_ Y | Z
-
-    Y: str
-        The second variable for testing the independence condition X _|_ Y | Z
-
-    Z: list/array-like
-        A list of conditional variable for testing the condition X _|_ Y | Z
-
     data: pandas.DataFrame
         The dataset in which to test the independence condition.
-
-    boolean: bool
-        If True, returns True (Independent) if p_value < significance_level.
 
     delta_threshold: float
         The equivalence bound (threshold for practical independence).

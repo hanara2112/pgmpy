@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -18,17 +18,6 @@ class PowerDivergence(_BaseCITest):
 
     Parameters
     ----------
-    X: int, string, hashable object
-        A variable name contained in the data set
-
-    Y: int, string, hashable object
-        A variable name contained in the data set, different from X
-
-    Z: list, array-like
-        A list of variable names contained in the data set, different from X and Y.
-        This is the separating set that (potentially) makes X and Y independent.
-        Default: []
-
     data: pandas.DataFrame
         The dataset on which to test the independence condition.
 
@@ -42,16 +31,6 @@ class PowerDivergence(_BaseCITest):
             * "mod-log-likelihood"  -1         "Modified Log-likelihood"
             * "neyman"              -2         "Neyman's statistic"
             * "cressie-read"        2/3        "The value recommended in the paper[1]"
-
-    boolean: bool
-        If boolean=True, an additional argument `significance_level` must
-            be specified. If p_value of the test is greater than equal to
-            `significance_level`, returns True. Otherwise returns False.
-
-        If boolean=False, returns the chi2 and p_value of the test.
-
-    **kwargs
-        Must contain `significance_level` if `boolean=True`.
 
     Returns
     -------
@@ -73,19 +52,13 @@ class PowerDivergence(_BaseCITest):
     ...     np.random.randint(0, 2, size=(50000, 4)), columns=list("ABCD")
     ... )
     >>> data["E"] = data["A"] + data["B"] + data["C"]
-    >>> power_divergence(
-    ...     X="A", Y="C", Z=[], data=data, boolean=True, significance_level=0.05
-    ... )
-    np.True_
-    >>> power_divergence(
-    ...     X="A", Y="B", Z=["D"], data=data, boolean=True, significance_level=0.05
-    ... )
-    np.True_
-    >>> power_divergence(
-    ...     X="A", Y="B", Z=["D", "E"], data=data, boolean=True, significance_level=0.05
-    ... )
-    np.False_
-
+    >>> test = PowerDivergence(data)
+    >>> test("A", "C", [], boolean=True, significance_level=0.05)
+    True
+    >>> test("A", "B", ["D"], boolean=True, significance_level=0.05)
+    True
+    >>> test("A", "B", ["D", "E"], boolean=True, significance_level=0.05)
+    False
     """
 
     _tags = {
@@ -95,7 +68,7 @@ class PowerDivergence(_BaseCITest):
         "requires_data": True,
     }
 
-    def __init__(self, data: pd.DataFrame, lambda_: str = "cressie-read"):
+    def __init__(self, data: pd.DataFrame, lambda_: Union[str, float] = "cressie-read"):
         self.data = data
         self.lambda_ = lambda_
         super().__init__()

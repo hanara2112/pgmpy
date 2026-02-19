@@ -124,6 +124,9 @@ def get_ci_test(test=None, data=None):
     if isinstance(test, _BaseCITest):
         return test
 
+    if callable(test):
+        return test
+
     if test is None:
         if data is None:
             raise ValueError(

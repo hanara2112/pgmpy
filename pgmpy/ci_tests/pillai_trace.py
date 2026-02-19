@@ -63,22 +63,11 @@ class PillaiTrace(_BaseCITest):
 
     Parameters
     ----------
-    X: str
-        The first variable for testing the independence condition X ⊥⊥ Y | Z
+    data: pandas.DataFrame
+        The dataset in which to test the independence condition.
 
-    Y: str
-        The second variable for testing the independence condition X ⊥⊥ Y | Z
-
-    Z: list/array-like
-        A list of conditional variable for testing the condition X ⊥⊥ Y | Z
-
-    boolean: bool
-        If boolean=True, an additional argument `significance_level` must
-            be specified. If p_value of the test is greater than equal to
-            `significance_level`, returns True. Otherwise returns False.
-
-        If boolean=False, returns the pearson correlation coefficient and p_value
-            of the test.
+    seed : int, optional
+        Random seed used for the underlying XGBoost models.
 
     Returns
     -------
@@ -143,7 +132,7 @@ class PillaiTrace(_BaseCITest):
 
         # Step 2: Get the predictions
         pred_x, pred_y, x_cat_index, y_cat_index = _get_predictions(
-            X, Y, Z, data, **kwargs
+            X, Y, Z, data, seed=self.seed, **kwargs
         )
 
         # Step 3: Compute the residuals

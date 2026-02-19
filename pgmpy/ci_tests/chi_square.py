@@ -11,25 +11,9 @@ class ChiSquare(PowerDivergence):
 
     Parameters
     ----------
-    X: int, string, hashable object
-        A variable name contained in the data set
-
-    Y: int, string, hashable object
-        A variable name contained in the data set, different from X
-
-    Z: list, array-like
-        A list of variable names contained in the data set, different from X and Y.
-        This is the separating set that (potentially) makes X and Y independent.
-        Default: []
 
     data: pandas.DataFrame
         The dataset on which to test the independence condition.
-
-    boolean: bool
-        If boolean=True, an additional argument `significance_level` must
-        be specified. If p_value of the test is greater than equal to
-        `significance_level`, returns True. Otherwise returns False.
-        If boolean=False, returns the chi2 and p_value of the test.
 
     Returns
     -------
@@ -50,16 +34,13 @@ class ChiSquare(PowerDivergence):
     ...     np.random.randint(0, 2, size=(50000, 4)), columns=list("ABCD")
     ... )
     >>> data["E"] = data["A"] + data["B"] + data["C"]
-    >>> chi_square(X="A", Y="C", Z=[], data=data, boolean=True, significance_level=0.05)
-    np.True_
-    >>> chi_square(
-    ...     X="A", Y="B", Z=["D"], data=data, boolean=True, significance_level=0.05
-    ... )
-    np.True_
-    >>> chi_square(
-    ...     X="A", Y="B", Z=["D", "E"], data=data, boolean=True, significance_level=0.05
-    ... )
-    np.False_
+    >>> test = ChiSquare(data)
+    >>> test("A", "C", [], boolean=True, significance_level=0.05)
+    True
+    >>> test("A", "B", ["D"], boolean=True, significance_level=0.05)
+    True
+    >>> test("A", "B", ["D", "E"], boolean=True, significance_level=0.05)
+    False
     """
 
     _tags = {
