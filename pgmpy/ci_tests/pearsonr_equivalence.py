@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -48,6 +48,32 @@ class PearsonrEquivalence(_BaseCITest):
         self._pearsonr_test = Pearsonr(data)
         super().__init__()
 
+    def test(
+        self,
+        X: str,
+        Y: str,
+        Z: Optional[list] = None,
+        boolean: bool = True,
+        significance_level: float = 0.05,
+        **kwargs,
+    ) -> Union[bool, Tuple[float, ...]]:
+        """
+        Perform the equivalence CI test.
+
+        Note: For equivalence tests, independence is concluded when p_value < significance_level
+        (rejecting the null of dependence), which is the OPPOSITE of standard CI tests.
+        """
+        Z = [] if Z is None else list(Z)
+        self._validate_inputs(X, Y, Z)
+
+        result = self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
+        p_value = result[1]
+
+        if boolean:
+            # INVERTED: equivalence test returns True when p < alpha
+            return p_value < significance_level
+        return result
+
     def _compute_statistic(
         self,
         X: str,
@@ -72,7 +98,7 @@ class PearsonrEquivalence(_BaseCITest):
         Returns
         -------
         tuple
-            A tuple of (partial correlation, p-value).
+            A tuple of (Fisher z-transformed partial correlation, p-value).
         """
         data = self.data
         # Step 2: Compute Partial Pearson Correlation and clip values to avoid infinities

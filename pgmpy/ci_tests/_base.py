@@ -114,6 +114,20 @@ class _BaseCITest(BaseObject):
         raise NotImplementedError
 
 
+def _instantiate_ci_test(cls, data=None):
+    """
+    Helper to instantiate a CI test class, respecting whether it requires data.
+    """
+    requires_data = cls.get_class_tag("requires_data", tag_value_default=True)
+    if requires_data:
+        if data is None:
+            raise ValueError(
+                f"CI test '{cls.__name__}' requires data, but data is None."
+            )
+        return cls(data=data)
+    return cls()
+
+
 def get_ci_test(test=None, data=None):
     """
     Retrieve CI test instance by name or infer default from data.
@@ -143,7 +157,7 @@ def get_ci_test(test=None, data=None):
         )
 
         if tests:
-            return tests[0](data=data)
+            return _instantiate_ci_test(tests[0], data=data)
 
         raise ValueError(f"No default CI test found for data type '{var_type}'.")
 
@@ -156,7 +170,7 @@ def get_ci_test(test=None, data=None):
         )
 
         if tests:
-            return tests[0](data=data)
+            return _instantiate_ci_test(tests[0], data=data)
 
         raise ValueError(f"Unknown CI test: {test!r}")
 

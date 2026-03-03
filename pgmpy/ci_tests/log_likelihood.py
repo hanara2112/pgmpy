@@ -43,7 +43,7 @@ class LogLikelihood(PowerDivergence):
     >>> test("A", "B", ["D"], boolean=True, significance_level=0.05)
     True
     >>> test("A", "B", ["D", "E"], boolean=True, significance_level=0.05)
-    Falsepgmpy/ci_tests/pearsonr.py
+    False
     """
 
     _tags = {
