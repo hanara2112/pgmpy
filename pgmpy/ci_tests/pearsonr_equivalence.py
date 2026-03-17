@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -53,15 +53,19 @@ class PearsonrEquivalence(Pearsonr):
         X: str,
         Y: str,
         Z: Optional[list] = None,
-        boolean: bool = True,
         significance_level: float = 0.05,
         **kwargs,
-    ) -> Union[bool, Tuple[float, ...]]:
+    ) -> bool:
         """
         Perform the equivalence CI test.
 
-        Note: For equivalence tests, independence is concluded when p_value < significance_level
+        Note: Independence is concluded when p_value_ < significance_level
         (rejecting the null of dependence), which is the OPPOSITE of standard CI tests.
+
+        Returns
+        -------
+        bool
+            True if X ⊥⊥ Y | Z (p_value_ < significance_level), else False.
         """
         if not isinstance(Z, (list, tuple)):
             raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
@@ -69,10 +73,7 @@ class PearsonrEquivalence(Pearsonr):
 
         self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
 
-        if boolean:
-            # INVERTED: equivalence test returns True when p < alpha
-            return self.p_value_ < significance_level
-        return self.statistic_, self.p_value_
+        return self.p_value_ < significance_level
 
     def _compute_statistic(
         self,

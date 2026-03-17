@@ -54,17 +54,17 @@ class TestGCM(unittest.TestCase):
         test = GCM(data=self.df_indep)
 
         # Non-conditional test
-        test("X", "Y", [], boolean=False)
+        test("X", "Y", [])
         self.assertAlmostEqual(round(test.statistic_, 3), 13.693)
         self.assertAlmostEqual(test.p_value_, 0.0)
 
         # Conditional test (independent)
-        test("X", "Y", ["Z1", "Z2", "Z3"], boolean=False)
+        test("X", "Y", ["Z1", "Z2", "Z3"])
         self.assertAlmostEqual(round(test.statistic_, 3), 0.097)
         self.assertEqual(round(test.p_value_, 4), 0.9228)
 
         # Conditional test (dependent)
         test = GCM(data=self.df_dep)
-        test("X", "Y", ["Z1", "Z2", "Z3"], boolean=False)
+        test("X", "Y", ["Z1", "Z2", "Z3"])
         self.assertAlmostEqual(round(test.statistic_, 3), 11.69)
         self.assertAlmostEqual(test.p_value_, 0.0)

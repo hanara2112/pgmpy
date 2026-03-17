@@ -39,10 +39,8 @@ class TestPearsonrEquivalence(unittest.TestCase):
     def test_pearsonr_equivalence(self):
         test = PearsonrEquivalence(data=self.df_dep, delta_threshold=0.1)
 
-        self.assertFalse(
-            test("X", "Y", ["Z1", "Z2", "Z3"], boolean=True, significance_level=0.05)
-        )
+        self.assertFalse(test("X", "Y", ["Z1", "Z2", "Z3"], significance_level=0.05))
 
-        test("X", "Y", ["Z1", "Z2", "Z3"], boolean=False)
+        test("X", "Y", ["Z1", "Z2", "Z3"])
         self.assertIsInstance(test.statistic_, float)
         self.assertIsInstance(test.p_value_, float)

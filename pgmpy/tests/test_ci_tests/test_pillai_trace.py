@@ -144,7 +144,7 @@ class TestPillaiTrace(unittest.TestCase):
             ]
         ):
             test = PillaiTrace(data=df, seed=42)
-            test("X", "Y", [], boolean=False)
+            test("X", "Y", [])
             computed_coefs.append(test.statistic_)
             computed_pvalues.append(test.p_value_)
 
@@ -177,7 +177,7 @@ class TestPillaiTrace(unittest.TestCase):
             ]
         ):
             test = PillaiTrace(data=df, seed=42)
-            test("X", "Y", ["Z1", "Z2", "Z3"], boolean=False)
+            test("X", "Y", ["Z1", "Z2", "Z3"])
             computed_coefs.append(test.statistic_)
             computed_pvalues.append(test.p_value_)
 
@@ -210,7 +210,7 @@ class TestPillaiTrace(unittest.TestCase):
             ]
         ):
             test = PillaiTrace(data=df, seed=42)
-            test("X", "Y", ["Z1", "Z2", "Z3"], boolean=False)
+            test("X", "Y", ["Z1", "Z2", "Z3"])
             computed_coefs.append(test.statistic_)
             computed_pvalues.append(test.p_value_)
 

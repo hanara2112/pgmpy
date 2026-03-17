@@ -37,11 +37,11 @@ class ChiSquare(PowerDivergence):
     ... )
     >>> data["E"] = data["A"] + data["B"] + data["C"]
     >>> test = ChiSquare(data)
-    >>> test("A", "C", [], boolean=True, significance_level=0.05)
+    >>> test("A", "C", [], significance_level=0.05)
     True
-    >>> test("A", "B", ["D"], boolean=True, significance_level=0.05)
+    >>> test("A", "B", ["D"], significance_level=0.05)
     True
-    >>> test("A", "B", ["D", "E"], boolean=True, significance_level=0.05)
+    >>> test("A", "B", ["D", "E"], significance_level=0.05)
     False
     """
 

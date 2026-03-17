@@ -35,7 +35,6 @@ class IndependenceMatch(_BaseCITest):
         X: str,
         Y: str,
         Z: Optional[list] = None,
-        boolean: bool = True,
         significance_level: float = 0.05,
         **kwargs,
     ) -> bool:

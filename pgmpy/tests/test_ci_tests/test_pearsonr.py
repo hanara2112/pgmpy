@@ -33,26 +33,25 @@ class TestPearsonr(unittest.TestCase):
 
     def test_pearsonr(self):
         test = Pearsonr(data=self.df_ind)
-        test("X", "Y", [], boolean=False)
+        test("X", "Y", [])
         self.assertTrue(test.statistic_ < 0.1)
         self.assertTrue(test.p_value_ > 0.05)
 
         test = Pearsonr(data=self.df_cind)
-        test("X", "Y", ["Z"], boolean=False)
+        test("X", "Y", ["Z"])
         self.assertTrue(test.statistic_ < 0.1)
         self.assertTrue(test.p_value_ > 0.05)
 
         test = Pearsonr(data=self.df_cind_mul)
-        test("X", "Y", ["Z1", "Z2"], boolean=False)
+        test("X", "Y", ["Z1", "Z2"])
         self.assertTrue(test.statistic_ < 0.1)
         self.assertTrue(test.p_value_ > 0.05)
 
         test = Pearsonr(data=self.df_vstruct)
-        test("X", "Y", ["Z"], boolean=False)
+        test("X", "Y", ["Z"])
         self.assertTrue(abs(test.statistic_) > 0.9)
         self.assertTrue(test.p_value_ < 0.05)
 
-        # Tests for when boolean=True
         self.assertTrue(
             Pearsonr(data=self.df_ind)("X", "Y", [], significance_level=0.05)
         )
@@ -113,11 +112,11 @@ class TestPearsonrResidual(unittest.TestCase):
 
     def test_pearsonr(self):
         test = Pearsonr(data=self.df_indep)
-        test("X", "Y", ["Z1", "Z2", "Z3"], boolean=False)
+        test("X", "Y", ["Z1", "Z2", "Z3"])
         self.assertTrue(abs(test.statistic_) <= 0.1)
         self.assertTrue(test.p_value_ >= 0.04)
 
         test = Pearsonr(data=self.df_dep)
-        test("X", "Y", ["Z1", "Z2", "Z3"], boolean=False)
+        test("X", "Y", ["Z1", "Z2", "Z3"])
         self.assertTrue(test.statistic_ >= 0.1)
         self.assertTrue(np.isclose(test.p_value_, 0, atol=1e-1))

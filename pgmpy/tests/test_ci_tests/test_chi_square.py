@@ -14,17 +14,17 @@ class TestChiSquare(unittest.TestCase):
 
     def test_chisquare_adult_dataset(self):
         # Comparison values taken from dagitty (DAGitty)
-        self.test("Age", "Immigrant", [], boolean=False)
+        self.test("Age", "Immigrant", [])
         np_test.assert_almost_equal(self.test.statistic_, 57.75, decimal=1)
         np_test.assert_almost_equal(np.log(self.test.p_value_), -25.47, decimal=1)
         self.assertEqual(self.test.dof_, 4)
 
-        self.test("Age", "Race", [], boolean=False)
+        self.test("Age", "Race", [])
         np_test.assert_almost_equal(self.test.statistic_, 56.25, decimal=1)
         np_test.assert_almost_equal(np.log(self.test.p_value_), -24.75, decimal=1)
         self.assertEqual(self.test.dof_, 4)
 
-        self.test("Age", "Sex", [], boolean=False)
+        self.test("Age", "Sex", [])
         np_test.assert_almost_equal(self.test.statistic_, 289.62, decimal=1)
         np_test.assert_almost_equal(np.log(self.test.p_value_), -139.82, decimal=1)
         self.assertEqual(self.test.dof_, 4)
@@ -33,18 +33,17 @@ class TestChiSquare(unittest.TestCase):
             "Education",
             "HoursPerWeek",
             ["Age", "Immigrant", "Race", "Sex"],
-            boolean=False,
         )
         np_test.assert_almost_equal(self.test.statistic_, 1460.11, decimal=1)
         np_test.assert_almost_equal(self.test.p_value_, 0, decimal=1)
         self.assertEqual(self.test.dof_, 316)
 
-        self.test("Immigrant", "Sex", [], boolean=False)
+        self.test("Immigrant", "Sex", [])
         np_test.assert_almost_equal(self.test.statistic_, 0.2724, decimal=1)
         np_test.assert_almost_equal(np.log(self.test.p_value_), -0.50, decimal=1)
         self.assertEqual(self.test.dof_, 1)
 
-        self.test("Education", "MaritalStatus", ["Age", "Sex"], boolean=False)
+        self.test("Education", "MaritalStatus", ["Age", "Sex"])
         np_test.assert_almost_equal(self.test.statistic_, 481.96, decimal=1)
         np_test.assert_almost_equal(self.test.p_value_, 0, decimal=1)
         self.assertEqual(self.test.dof_, 58)
@@ -55,7 +54,6 @@ class TestChiSquare(unittest.TestCase):
             "Income",
             "Race",
             ["Age", "Education", "HoursPerWeek", "MaritalStatus"],
-            boolean=False,
         )
         np_test.assert_almost_equal(self.test.statistic_, 66.39, decimal=1)
         np_test.assert_almost_equal(self.test.p_value_, 0.99, decimal=1)
@@ -65,7 +63,6 @@ class TestChiSquare(unittest.TestCase):
             "Immigrant",
             "Income",
             ["Age", "Education", "HoursPerWeek", "MaritalStatus"],
-            boolean=False,
         )
         np_test.assert_almost_equal(self.test.statistic_, 65.59, decimal=1)
         np_test.assert_almost_equal(self.test.p_value_, 0.999, decimal=2)
@@ -96,6 +93,6 @@ class TestChiSquare(unittest.TestCase):
         df = pd.DataFrame({"x": x, "y": y})
 
         test = ChiSquare(data=df)
-        test("x", "y", [], boolean=False)
+        test("x", "y", [])
         self.assertEqual(test.dof_, 1)
         np_test.assert_almost_equal(test.p_value_, 0, decimal=5)

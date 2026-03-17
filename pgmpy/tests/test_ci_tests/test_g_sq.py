@@ -37,6 +37,6 @@ class TestGSq(unittest.TestCase):
         df = pd.DataFrame({"x": x, "y": y})
 
         test = GSq(data=df)
-        test("x", "y", [], boolean=False)
+        test("x", "y", [])
         self.assertEqual(test.dof_, 1)
         np_test.assert_almost_equal(test.p_value_, 0, decimal=5)

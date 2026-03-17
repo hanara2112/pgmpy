@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Union
 
 import pandas as pd
 from skbase.base import BaseObject
@@ -23,7 +23,6 @@ class _BaseCITest(BaseObject):
         X: str,
         Y: str,
         Z: Union[list, tuple] = (),
-        boolean: bool = True,
         significance_level: float = 0.05,
         **kwargs,
     ):
@@ -31,7 +30,6 @@ class _BaseCITest(BaseObject):
             X=X,
             Y=Y,
             Z=Z,
-            boolean=boolean,
             significance_level=significance_level,
             **kwargs,
         )
@@ -41,10 +39,9 @@ class _BaseCITest(BaseObject):
         X: str,
         Y: str,
         Z: Union[list, tuple] = (),
-        boolean: bool = True,
         significance_level: float = 0.05,
         **kwargs,
-    ) -> Union[bool, Tuple[float, ...]]:
+    ) -> bool:
         """
         Perform the conditional independence test.
 
@@ -57,19 +54,15 @@ class _BaseCITest(BaseObject):
         Z : list or tuple
             A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
             Default is an empty tuple.
-        boolean : bool, default=True
-            If True, returns a boolean indicating independence (p-value >= significance_level).
-            If False, returns the test statistic and p-value.
         significance_level : float, default=0.05
-            The significance level for the test. Only used if boolean=True.
+            The significance level for the test.
         **kwargs
             Additional arguments specific to the CI test implementation.
 
         Returns
         -------
-        bool or tuple
-            If boolean=True, returns True if p-value >= significance_level, else False.
-            If boolean=False, returns a tuple of (test_statistic, p-value).
+        bool
+            True if X ⊥⊥ Y | Z (p_value_ >= significance_level), else False.
 
         Raises
         ------
@@ -78,7 +71,8 @@ class _BaseCITest(BaseObject):
 
         Notes
         -----
-        This method sets ``self.statistic_`` and ``self.p_value_`` as side effects.
+        Always sets ``self.statistic_`` and ``self.p_value_`` as side effects,
+        regardless of the return value. Access these attributes to inspect raw results.
         CI test instances are not thread-safe; use a separate instance per thread
         for parallel computation.
         """
@@ -89,10 +83,7 @@ class _BaseCITest(BaseObject):
 
         self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
 
-        if boolean:
-            return self.p_value_ >= significance_level
-
-        return self.statistic_, self.p_value_
+        return self.p_value_ >= significance_level
 
     def _validate_inputs(self, X, Y, Z):
         if X == Y:
@@ -112,22 +103,6 @@ class _BaseCITest(BaseObject):
             missing = ({X, Y} | set(Z)) - set(self.data.columns)
             if missing:
                 raise ValueError(f"Missing columns in data: {missing}")
-
-    def _compute_statistic(
-        self,
-        X: str,
-        Y: str,
-        Z: list,
-        **kwargs,
-    ) -> None:
-        """
-        Compute the test statistic and p-value and store them as instance attributes.
-
-        Subclasses must set ``self.statistic_`` and ``self.p_value_``.
-        Additional test-specific results (e.g. ``self.dof_``) may also be set
-        using the same trailing-underscore convention.
-        """
-        raise NotImplementedError
 
 
 def _instantiate_ci_test(cls, data=None):
