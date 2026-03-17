@@ -11,15 +11,17 @@ class ChiSquare(PowerDivergence):
 
     Parameters
     ----------
-
     data: pandas.DataFrame
         The dataset on which to test the independence condition.
 
-    Returns
-    -------
-    result : bool or tuple
-        If boolean=False, returns (chi, p_value, dof).
-        If boolean=True, returns True if p_value > significance_level.
+    Attributes
+    ----------
+    statistic_ : float
+        The chi-squared test statistic. Set after calling the test.
+    p_value_ : float
+        The p-value for the test. Set after calling the test.
+    dof_ : int
+        Degrees of freedom for the test. Set after calling the test.
 
     References
     ----------

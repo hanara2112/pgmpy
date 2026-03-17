@@ -21,11 +21,12 @@ class PillaiTrace(_BaseCITest):
     seed : int, optional
         Random seed used for the underlying XGBoost models.
 
-    Returns
-    -------
-    CI Test results: tuple or bool
-        If boolean=True, returns True if p-value >= significance_level, else False. If
-        boolean=False, returns a tuple of (Pearson's correlation Coefficient, p-value)
+    Attributes
+    ----------
+    statistic_ : float
+        Pillai's trace statistic. Set after calling the test.
+    p_value_ : float
+        The p-value for the test, computed via F-approximation. Set after calling the test.
 
     References
     ----------

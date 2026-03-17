@@ -13,15 +13,14 @@ class ModifiedLogLikelihood(PowerDivergence):
     data: pandas.DataFrame
         The dataset on which to test the independence condition.
 
-    Returns
-    -------
-    CI Test Results: tuple or bool
-        If boolean = False, Returns a tuple (chi, p_value, dof). `chi` is the
-        chi-squared test statistic. The `p_value` for the test, i.e. the
-        probability of observing the computed chi-square statistic (or an even
-        higher value), given the null hypothesis that X ⊥⊥ Y | Zs is True.
-        If boolean = True, returns True if the p_value of the test is greater
-        than `significance_level` else returns False.
+    Attributes
+    ----------
+    statistic_ : float
+        The modified log-likelihood ratio test statistic. Set after calling the test.
+    p_value_ : float
+        The p-value for the test. Set after calling the test.
+    dof_ : int
+        Degrees of freedom for the test. Set after calling the test.
 
     Examples
     --------

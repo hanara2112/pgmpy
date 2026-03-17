@@ -19,11 +19,12 @@ class GCM(_BaseCITest):
         The dataset in which to test the independence condition.
 
 
-    Returns
-    -------
-    CI Test results: tuple or bool
-        If boolean=True, returns True if p-value >= significance_level, else False. If
-        boolean=False, returns a tuple of (Pearson's correlation Coefficient, p-value)
+    Attributes
+    ----------
+    statistic_ : float
+        The GCM t-statistic. Set after calling the test.
+    p_value_ : float
+        The p-value for the test. Set after calling the test.
 
     References
     ----------

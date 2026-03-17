@@ -14,20 +14,9 @@ class IndependenceMatch(_BaseCITest):
 
     Parameters
     ----------
-    X : str
-        The first variable for testing the independence condition X ⊥⊥ Y | Z.
-
-    Y : str
-        The second variable for testing the independence condition X ⊥⊥ Y | Z.
-    Z : list or array-like
-        A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
     independencies : pgmpy.independencies.Independencies
-        The object containing the known independences.
-
-    Returns
-    -------
-    bool
-        True if the independence assertion is present in `independences`, else False.
+        The object containing the known independencies. Can also be passed
+        per-call as a keyword argument to ``test()``.
     """
 
     _tags = {

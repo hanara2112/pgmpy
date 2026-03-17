@@ -17,11 +17,13 @@ class Pearsonr(_BaseCITest):
     data : pandas.DataFrame
         The dataset in which to test the independence condition.
 
-    Returns
-    -------
-    result : bool or tuple
-        If boolean=True, returns True if p-value >= significance_level, else False.
-        If boolean=False, returns a tuple of (Pearson's correlation Coefficient, p-value).
+    Attributes
+    ----------
+    statistic_ : float
+        Pearson's correlation coefficient (or partial correlation when Z is non-empty),
+        ranging from -1 to 1. Set after calling the test.
+    p_value_ : float
+        The p-value for the test. Set after calling the test.
 
     References
     ----------

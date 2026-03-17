@@ -22,11 +22,14 @@ class PearsonrEquivalence(Pearsonr):
     delta_threshold: float
         The equivalence bound (threshold for practical independence).
 
-    Returns
-    -------
-    CI Test results: tuple or bool
-        If boolean=True, returns True (Independent) if p-value < significance_level.
-        If boolean=False, returns (Partial Correlation, p-value).
+    Attributes
+    ----------
+    statistic_ : float
+        Fisher z-transformed partial correlation coefficient. Set after calling the test.
+    p_value_ : float
+        The p-value from the TOST (Two One-Sided Tests) procedure. Independence is
+        concluded when p_value_ < significance_level (opposite of standard CI tests).
+        Set after calling the test.
 
     References
     ----------

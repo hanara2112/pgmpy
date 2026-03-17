@@ -31,11 +31,14 @@ class PowerDivergence(_BaseCITest):
             * "neyman"              -2         "Neyman's statistic"
             * "cressie-read"        2/3        "The value recommended in the paper[1]"
 
-    Returns
-    -------
-    result : bool or tuple
-        If boolean=False, returns (chi, p_value, dof).
-        If boolean=True, returns True if p_value > significance_level.
+    Attributes
+    ----------
+    statistic_ : float
+        The chi-squared test statistic. Set after calling the test.
+    p_value_ : float
+        The p-value for the test. Set after calling the test.
+    dof_ : int
+        Degrees of freedom for the test. Set after calling the test.
 
     References
     ----------
