@@ -58,7 +58,8 @@ class IndependenceMatch(_BaseCITest):
         bool
             True if the independence assertion is present in `independencies`, else False.
         """
-        Z = [] if Z is None else list(Z)
+        if not isinstance(Z, (list, tuple)):
+            raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
         self._validate_inputs(X, Y, Z)
 
         independencies = kwargs.get("independencies") or self.independencies

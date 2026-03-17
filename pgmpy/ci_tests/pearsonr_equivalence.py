@@ -60,7 +60,8 @@ class PearsonrEquivalence(Pearsonr):
         Note: For equivalence tests, independence is concluded when p_value < significance_level
         (rejecting the null of dependence), which is the OPPOSITE of standard CI tests.
         """
-        Z = [] if Z is None else list(Z)
+        if not isinstance(Z, (list, tuple)):
+            raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
         self._validate_inputs(X, Y, Z)
 
         self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)

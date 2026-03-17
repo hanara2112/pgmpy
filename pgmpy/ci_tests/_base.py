@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, Tuple, Union
+from typing import Tuple, Union
 
 import pandas as pd
 from skbase.base import BaseObject
@@ -22,7 +22,7 @@ class _BaseCITest(BaseObject):
         self,
         X: str,
         Y: str,
-        Z: Optional[Iterable] = None,
+        Z: Union[list, tuple] = (),
         boolean: bool = True,
         significance_level: float = 0.05,
         **kwargs,
@@ -40,7 +40,7 @@ class _BaseCITest(BaseObject):
         self,
         X: str,
         Y: str,
-        Z: Optional[Iterable] = None,
+        Z: Union[list, tuple] = (),
         boolean: bool = True,
         significance_level: float = 0.05,
         **kwargs,
@@ -54,9 +54,9 @@ class _BaseCITest(BaseObject):
             The first variable for testing the independence condition X ⊥⊥ Y | Z.
         Y : str
             The second variable for testing the independence condition X ⊥⊥ Y | Z.
-        Z : list or array-like, optional
+        Z : list or tuple
             A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
-            Default is None, which is treated as an empty list.
+            Default is an empty tuple.
         boolean : bool, default=True
             If True, returns a boolean indicating independence (p-value >= significance_level).
             If False, returns the test statistic and p-value.
@@ -83,7 +83,8 @@ class _BaseCITest(BaseObject):
         for parallel computation.
         """
 
-        Z = [] if Z is None else list(Z)
+        if not isinstance(Z, (list, tuple)):
+            raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
         self._validate_inputs(X, Y, Z)
 
         self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
@@ -96,6 +97,11 @@ class _BaseCITest(BaseObject):
     def _validate_inputs(self, X, Y, Z):
         if X == Y:
             raise ValueError("X and Y must be different variables.")
+
+        if X in Z or Y in Z:
+            raise ValueError(
+                f"X and Y cannot appear in Z. Found {X if X in Z else Y} in Z."
+            )
 
         if self.get_tag("requires_data"):
             if not hasattr(self, "data") or not isinstance(self.data, pd.DataFrame):

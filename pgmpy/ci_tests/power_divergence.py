@@ -11,10 +11,9 @@ from ._base import _BaseCITest
 
 class PowerDivergence(_BaseCITest):
     """
-    Computes the Cressie-Read power divergence statistic [1]. The null hypothesis
-    for the test is X is independent of Y given Z. A lot of the frequency comparision
-    based statistics (eg. chi-square, G-test etc) belong to power divergence family,
-    and are special cases of this test.
+    Computes the Cressie-Read power divergence statistic [1]. The null hypothesis for the test is X is independent of Y
+    given Z. A lot of the frequency comparison based statistics (eg. chi-square, G-test etc) belong to power divergence
+    family, and are special cases of this test.
 
     Parameters
     ----------
@@ -85,14 +84,9 @@ class PowerDivergence(_BaseCITest):
 
         Sets ``self.statistic_`` (chi-squared), ``self.p_value_``, and ``self.dof_``.
         """
-        # Step 1: Check if the arguments are valid and type conversions.
         data = self.data
-        if (X in Z) or (Y in Z):
-            raise ValueError(
-                f"The variables X or Y can't be in Z. Found {X if X in Z else Y} in Z."
-            )
 
-        # Step 2: Do a simple contingency test if there are no conditional variables.
+        # Step 1: Do a simple contingency test if there are no conditional variables.
         if len(Z) == 0:
             chi, p_value, dof, expected = stats.chi2_contingency(
                 data.groupby([X, Y], observed=False).size().unstack(Y, fill_value=0),
