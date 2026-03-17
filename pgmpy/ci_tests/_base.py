@@ -75,20 +75,23 @@ class _BaseCITest(BaseObject):
         ------
         ValueError
             If inputs are invalid.
+
+        Notes
+        -----
+        This method sets ``self.statistic_`` and ``self.p_value_`` as side effects.
+        CI test instances are not thread-safe; use a separate instance per thread
+        for parallel computation.
         """
 
         Z = [] if Z is None else list(Z)
         self._validate_inputs(X, Y, Z)
 
-        result = self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
-
-        # p_value is always second element
-        p_value = result[1]
+        self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
 
         if boolean:
-            return p_value >= significance_level
+            return self.p_value_ >= significance_level
 
-        return result
+        return self.statistic_, self.p_value_
 
     def _validate_inputs(self, X, Y, Z):
         if X == Y:
@@ -110,7 +113,14 @@ class _BaseCITest(BaseObject):
         Y: str,
         Z: list,
         **kwargs,
-    ) -> Tuple[float, ...]:
+    ) -> None:
+        """
+        Compute the test statistic and p-value and store them as instance attributes.
+
+        Subclasses must set ``self.statistic_`` and ``self.p_value_``.
+        Additional test-specific results (e.g. ``self.dof_``) may also be set
+        using the same trailing-underscore convention.
+        """
         raise NotImplementedError
 
 

@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -50,25 +48,11 @@ class GCM(_BaseCITest):
         Y: str,
         Z: list,
         **kwargs,
-    ) -> Tuple[float, float]:
+    ) -> None:
         """
         Compute GCM statistic and p-value.
 
-        Parameters
-        ----------
-        X : str
-            The first variable for testing the independence condition X ⊥⊥ Y | Z.
-        Y : str
-            The second variable for testing the independence condition X ⊥⊥ Y | Z.
-        Z : list
-            A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
-        **kwargs
-            Additional arguments.
-
-        Returns
-        -------
-        tuple
-            A tuple of (t-statistic, p-value).
+        Sets ``self.statistic_`` (t-statistic) and ``self.p_value_``.
         """
         # Step 1.1: Add another column with constant values to handle intercepts.
         data = self.data
@@ -92,4 +76,5 @@ class GCM(_BaseCITest):
         # Step 4: Compute p-value using standard normal distribution.
         p_value = 2 * (1 - stats.norm.cdf(np.abs(t_stat)))
 
-        return t_stat, p_value
+        self.statistic_ = t_stat
+        self.p_value_ = p_value

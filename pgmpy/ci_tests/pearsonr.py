@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -48,25 +46,15 @@ class Pearsonr(_BaseCITest):
         Y: str,
         Z: list,
         **kwargs,
-    ) -> Tuple[float, float]:
+    ) -> None:
         """
         Compute Pearson correlation coefficient and p-value.
 
-        Parameters
-        ----------
-        X : str
-            The first variable for testing the independence condition X ⊥⊥ Y | Z.
-        Y : str
-            The second variable for testing the independence condition X ⊥⊥ Y | Z.
-        Z : list
-            A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
-        Returns
-        -------
-        tuple
-            A tuple of (Pearson's correlation Coefficient, p-value).
+        Sets ``self.statistic_`` (Pearson's r) and ``self.p_value_``.
         """
-        # Step 1: If Z is empty compute a non-conditional test.
         data = self.data
+
+        # Step 1: If Z is empty compute a non-conditional test.
         if len(Z) == 0:
             coef, p_value = stats.pearsonr(data.loc[:, X], data.loc[:, Y])
 
@@ -79,4 +67,5 @@ class Pearsonr(_BaseCITest):
             residual_Y = data.loc[:, Y] - data.loc[:, Z].dot(Y_coef)
             coef, p_value = stats.pearsonr(residual_X, residual_Y)
 
-        return coef, p_value
+        self.statistic_ = coef
+        self.p_value_ = p_value

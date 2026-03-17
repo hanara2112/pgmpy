@@ -1,57 +1,9 @@
-from typing import Tuple
-
 import numpy as np
 import pandas as pd
 from scipy import stats
 from sklearn.cross_decomposition import CCA
 
 from ._base import _BaseCITest
-
-
-def _get_predictions(X, Y, Z, data, **kwargs):
-    """
-    Helper Strategy: Function to get predictions using XGBoost for `ci_pillai`.
-    Not registered directly as a CI test.
-    """
-    try:
-        from xgboost import XGBClassifier, XGBRegressor
-    except ImportError as e:
-        raise ImportError(
-            f"{e}. xgboost is required for using pillai_trace test. Please install using: pip install xgboost"
-        ) from None
-
-    if any(data.loc[:, Z].dtypes == "category"):
-        enable_categorical = True
-    else:
-        enable_categorical = False
-
-    # Helper to fit and predict
-    def fit_predict(target_col):
-        is_cat = data.loc[:, target_col].dtype == "category"
-        model_cls = XGBClassifier if is_cat else XGBRegressor
-        model = model_cls(
-            enable_categorical=enable_categorical,
-            seed=kwargs.get("seed"),
-            random_state=kwargs.get("seed"),
-        )
-
-        target_data = data.loc[:, target_col]
-        cat_index = None
-
-        if is_cat:
-            y_encoded, cat_index = pd.factorize(target_data)
-            model.fit(data.loc[:, Z], y_encoded)
-            pred = model.predict_proba(data.loc[:, Z])
-        else:
-            model.fit(data.loc[:, Z], target_data)
-            pred = model.predict(data.loc[:, Z])
-
-        return pred, cat_index
-
-    pred_x, x_cat_index = fit_predict(X)
-    pred_y, y_cat_index = fit_predict(Y)
-
-    return pred_x, pred_y, x_cat_index, y_cat_index
 
 
 class PillaiTrace(_BaseCITest):
@@ -98,31 +50,58 @@ class PillaiTrace(_BaseCITest):
         self.data = data
         super().__init__()
 
+    def _get_predictions(self, X, Y, Z, data):
+        """
+        Get XGBoost predictions for X and Y given Z.
+        Uses ``self.seed`` for reproducibility.
+        """
+        try:
+            from xgboost import XGBClassifier, XGBRegressor
+        except ImportError as e:
+            raise ImportError(
+                f"{e}. xgboost is required for using pillai_trace test. Please install using: pip install xgboost"
+            ) from None
+
+        enable_categorical = any(data.loc[:, Z].dtypes == "category")
+
+        def fit_predict(target_col):
+            is_cat = data.loc[:, target_col].dtype == "category"
+            model_cls = XGBClassifier if is_cat else XGBRegressor
+            model = model_cls(
+                enable_categorical=enable_categorical,
+                seed=self.seed,
+                random_state=self.seed,
+            )
+
+            target_data = data.loc[:, target_col]
+            cat_index = None
+
+            if is_cat:
+                y_encoded, cat_index = pd.factorize(target_data)
+                model.fit(data.loc[:, Z], y_encoded)
+                pred = model.predict_proba(data.loc[:, Z])
+            else:
+                model.fit(data.loc[:, Z], target_data)
+                pred = model.predict(data.loc[:, Z])
+
+            return pred, cat_index
+
+        pred_x, x_cat_index = fit_predict(X)
+        pred_y, y_cat_index = fit_predict(Y)
+
+        return pred_x, pred_y, x_cat_index, y_cat_index
+
     def _compute_statistic(
         self,
         X: str,
         Y: str,
         Z: list,
         **kwargs,
-    ) -> Tuple[float, float]:
+    ) -> None:
         """
         Compute Pillai's trace statistic and p-value.
 
-        Parameters
-        ----------
-        X : str
-            The first variable for testing the independence condition X ⊥⊥ Y | Z.
-        Y : str
-            The second variable for testing the independence condition X ⊥⊥ Y | Z.
-        Z : list
-            A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
-        **kwargs
-            Additional arguments (e.g., seed).
-
-        Returns
-        -------
-        tuple
-            A tuple of (Pillai's trace coefficient, p-value).
+        Sets ``self.statistic_`` (Pillai's trace) and ``self.p_value_``.
         """
         data = self.data
         # Step 1.1: If no conditional variables are specified, use a constant value.
@@ -131,9 +110,7 @@ class PillaiTrace(_BaseCITest):
             data = data.assign(cont_Z=np.ones(data.shape[0]))
 
         # Step 2: Get the predictions
-        pred_x, pred_y, x_cat_index, y_cat_index = _get_predictions(
-            X, Y, Z, data, seed=self.seed, **kwargs
-        )
+        pred_x, pred_y, x_cat_index, y_cat_index = self._get_predictions(X, Y, Z, data)
 
         # Step 3: Compute the residuals
         def get_residuals(col_name, pred, cat_index):
@@ -171,4 +148,5 @@ class PillaiTrace(_BaseCITest):
         f_stat = (coef / df1) * (df2 / (s - coef))
         p_value = 1 - stats.f.cdf(f_stat, df1, df2)
 
-        return coef, p_value
+        self.statistic_ = coef
+        self.p_value_ = p_value

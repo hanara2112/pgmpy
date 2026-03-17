@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -79,25 +79,11 @@ class PowerDivergence(_BaseCITest):
         Y: str,
         Z: list,
         **kwargs,
-    ) -> Tuple[float, float, int]:
+    ) -> None:
         """
         Compute power divergence statistic, p-value, and degrees of freedom.
 
-        Parameters
-        ----------
-        X : str
-            The first variable for testing the independence condition X ⊥⊥ Y | Z.
-        Y : str
-            The second variable for testing the independence condition X ⊥⊥ Y | Z.
-        Z : list
-            A list of conditional variables for testing the condition X ⊥⊥ Y | Z.
-        **kwargs
-            Additional arguments.
-
-        Returns
-        -------
-        tuple
-            A tuple of (chi, p_value, dof).
+        Sets ``self.statistic_`` (chi-squared), ``self.p_value_``, and ``self.dof_``.
         """
         # Step 1: Check if the arguments are valid and type conversions.
         data = self.data
@@ -149,4 +135,6 @@ class PowerDivergence(_BaseCITest):
                     dof += d
             p_value = 1 - stats.chi2.cdf(chi, df=dof)
 
-        return chi, p_value, dof
+        self.statistic_ = chi
+        self.p_value_ = p_value
+        self.dof_ = dof
