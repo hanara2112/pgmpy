@@ -160,21 +160,17 @@ def get_ci_test(test=None, data=None):
     >>> existing = Pearsonr(data=data)
     >>> get_ci_test(test=existing) is existing
     True
+
+    Pass any callable (e.g. a custom function) and it is returned unchanged:
+
+    >>> def my_ci_test(X, Y, Z, significance_level=0.05):
+    ...     return True
+    ...
+    >>> get_ci_test(test=my_ci_test) is my_ci_test
+    True
     """
 
     from pgmpy.utils import get_dataset_type
-
-    def instantiate(cls):
-        if cls.get_class_tag("requires_data", tag_value_default=True):
-            if data is None:
-                raise ValueError(
-                    f"CI test '{cls.__name__}' requires data, but data is None."
-                )
-            return cls(data=data)
-        return cls()
-
-    if isinstance(test, _BaseCITest):
-        return test
 
     if callable(test):
         return test
@@ -186,30 +182,27 @@ def get_ci_test(test=None, data=None):
             )
 
         var_type = get_dataset_type(data)
+        filter_tags = {"default_for": var_type}
 
-        tests = all_objects(
-            object_types=_BaseCITest,
-            package_name="pgmpy.ci_tests",
-            return_names=False,
-            filter_tags={"default_for": var_type},
-        )
+    elif isinstance(test, str):
+        filter_tags = {"name": test.lower()}
+    else:
+        raise ValueError(f"Invalid `test` argument: {test!r}")
 
-        if tests:
-            return instantiate(tests[0])
+    tests = all_objects(
+        object_types=_BaseCITest,
+        package_name="pgmpy.ci_tests",
+        return_names=False,
+        filter_tags=filter_tags,
+    )
 
-        raise ValueError(f"No default CI test found for data type '{var_type}'.")
-
-    if isinstance(test, str):
-        tests = all_objects(
-            object_types=_BaseCITest,
-            package_name="pgmpy.ci_tests",
-            return_names=False,
-            filter_tags={"name": test.lower()},
-        )
-
-        if tests:
-            return instantiate(tests[0])
-
-        raise ValueError(f"Unknown CI test: {test!r}")
-
-    raise ValueError(f"Invalid `test` argument: {test!r}")
+    if tests:
+        cls = tests[0]
+        if cls.get_class_tag("requires_data", tag_value_default=True):
+            if data is None:
+                raise ValueError(
+                    f"CI test '{cls.__name__}' requires data, but data is None."
+                )
+            return cls(data=data)
+        return cls()
+    raise ValueError(f"Unknown CI test: {test!r}")
