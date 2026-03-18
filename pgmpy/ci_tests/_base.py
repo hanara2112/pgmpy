@@ -1,6 +1,5 @@
 from typing import Union
 
-import pandas as pd
 from skbase.base import BaseObject
 from skbase.lookup import all_objects
 
@@ -65,11 +64,7 @@ class _BaseCITest(BaseObject):
         CI test instances are not thread-safe; use a separate instance per thread
         for parallel computation.
         """
-
-        if not isinstance(Z, (list, tuple)):
-            raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
         self._validate_inputs(X, Y, Z)
-
         self._compute_statistic(X=X, Y=Y, Z=Z)
 
         return self.p_value_ >= significance_level
@@ -78,20 +73,13 @@ class _BaseCITest(BaseObject):
         if X == Y:
             raise ValueError("X and Y must be different variables.")
 
+        if not isinstance(Z, (list, tuple)):
+            raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
+
         if X in Z or Y in Z:
             raise ValueError(
                 f"X and Y cannot appear in Z. Found {X if X in Z else Y} in Z."
             )
-
-        if self.get_tag("requires_data"):
-            if not hasattr(self, "data") or not isinstance(self.data, pd.DataFrame):
-                raise ValueError(
-                    f"self.data must be a pandas.DataFrame. Got {type(getattr(self, 'data', None))}."
-                )
-
-            missing = ({X, Y} | set(Z)) - set(self.data.columns)
-            if missing:
-                raise ValueError(f"Missing columns in data: {missing}")
 
 
 def get_ci_test(test=None, data=None):
