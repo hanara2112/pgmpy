@@ -56,7 +56,7 @@ class GCM(_BaseCITest):
         """
         # Step 1.1: Add another column with constant values to handle intercepts.
         data = self.data
-        Z_aug = Z + ["intercept"]
+        Z_aug = list(Z) + ["intercept"]
         data_aug = data.assign(intercept=np.ones(data.shape[0]))
 
         # Step 2: Compute the linear regression and the residuals

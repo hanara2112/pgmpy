@@ -65,7 +65,7 @@ class _BaseCITest(BaseObject):
         for parallel computation.
         """
         self._validate_inputs(X, Y, Z)
-        self._compute_statistic(X=X, Y=Y, Z=Z)
+        self._compute_statistic(X=X, Y=Y, Z=list(Z))
 
         return self.p_value_ >= significance_level
 

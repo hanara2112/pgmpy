@@ -99,7 +99,7 @@ class PowerDivergence(_BaseCITest):
         else:
             chi = 0
             dof = 0
-            for z_state, df in data.groupby(Z, observed=True):
+            for z_state, df in data.groupby(list(Z), observed=True):
                 # Compute the contingency table
                 unique_x, x_inv = np.unique(df[X], return_inverse=True)
                 unique_y, y_inv = np.unique(df[Y], return_inverse=True)
