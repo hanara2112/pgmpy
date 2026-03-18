@@ -24,9 +24,9 @@ class FisherC(_BaseUnsupervisedMetric):
 
     Parameters
     ----------
-    ci_test: function
-        The function for statistical test. Can be either any of the tests in
-        pgmpy.estimators.CITests or any custom function of the same form.
+    ci_test: str or callable
+        The CI test to use for statistical testing. Can be a string name of any test
+        in :mod:`pgmpy.ci_tests` (e.g. ``"chi_square"``, ``"pearsonr"``) or a callable.
 
     compute_rmsea: bool (default: False)
         While calculating Fisher C statistic if RMSEA value required should be
@@ -48,10 +48,9 @@ class FisherC(_BaseUnsupervisedMetric):
     Examples
     --------
     >>> from pgmpy.utils import get_example_model
-    >>> from pgmpy.estimators.CITests import chi_square
     >>> model = get_example_model("cancer")
     >>> df = model.simulate(int(1e3))
-    >>> fisher_c = FisherC(ci_test=chi_square, compute_rmsea=False)
+    >>> fisher_c = FisherC(ci_test="chi_square", compute_rmsea=False)
     >>> fisher_c(X=df, causal_graph=model)
     0.7504
     """
@@ -94,10 +93,10 @@ class FisherC(_BaseUnsupervisedMetric):
                 )
                 ci_test(X=u, Y=v, Z=list(Z))
                 cis.append([u, v, Z, ci_test.p_value_])
-        cis = pd.DataFrame(cis, columns=["u", "v", "cond_vars", "p_value"])
-        cis.loc[:, "p_value"] = cis.loc[:, "p_value"].clip(lower=1e-6)
+        cis = pd.DataFrame(cis, columns=["u", "v", "cond_vars", "p-value"])
+        cis.loc[:, "p-value"] = cis.loc[:, "p-value"].clip(lower=1e-6)
 
-        C = -2 * np.log(cis.loc[:, "p_value"]).sum()
+        C = -2 * np.log(cis.loc[:, "p-value"]).sum()
         p_value = 1 - stats.chi2.cdf(C, df=2 * cis.shape[0])
         rmsea = np.nan
 

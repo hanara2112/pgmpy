@@ -20,9 +20,9 @@ class ImpliedCIs(_BaseUnsupervisedMetric):
 
     Parameters
     ----------
-    ci_test: fun or str
-        The function for statistical test. Can be either any of the tests in
-        pgmpy.estimators.CITests or any custom function of the same form.
+    ci_test: str or callable
+        The CI test to use for statistical testing. Can be a string name of any test
+        in :mod:`pgmpy.ci_tests` (e.g. ``"chi_square"``, ``"pearsonr"``) or a callable.
 
     show_progress: bool (default: True)
         Whether to show the progress of testing.
@@ -36,8 +36,7 @@ class ImpliedCIs(_BaseUnsupervisedMetric):
     Examples
     --------
     >>> from pgmpy.utils import get_example_model
-    >>> from pgmpy.metrics import implied_cis
-    >>> from pgmpy.estimators.CITests import chi_square
+    >>> from pgmpy.metrics import ImpliedCIs
     >>> model = get_example_model("cancer")
     >>> df = model.simulate(int(1e3))
     >>> implied_cis = ImpliedCIs(ci_test="chi_square", show_progress=False)
