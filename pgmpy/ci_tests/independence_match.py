@@ -15,8 +15,7 @@ class IndependenceMatch(_BaseCITest):
     Parameters
     ----------
     independencies : pgmpy.independencies.Independencies
-        The object containing the known independencies. Can also be passed
-        per-call as a keyword argument to ``test()``.
+        The object containing the known independencies.
     """
 
     _tags = {
@@ -36,7 +35,6 @@ class IndependenceMatch(_BaseCITest):
         Y: str,
         Z: Optional[list] = None,
         significance_level: float = 0.05,
-        **kwargs,
     ) -> bool:
         """
         Test independence assertion.
@@ -50,15 +48,11 @@ class IndependenceMatch(_BaseCITest):
             raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
         self._validate_inputs(X, Y, Z)
 
-        independencies = kwargs.get("independencies") or self.independencies
+        if self.independencies is None:
+            raise ValueError("independencies must be provided in __init__.")
 
-        if independencies is None:
-            raise ValueError(
-                "independencies must be provided either in __init__ or as a keyword argument."
-            )
+        return IndependenceAssertion(X, Y, Z) in self.independencies
 
-        return IndependenceAssertion(X, Y, Z) in independencies
-
-    def _compute_statistic(self, X, Y, Z, **kwargs):
+    def _compute_statistic(self, X, Y, Z):
         """Not used for IndependenceMatch as it returns boolean directly."""
         raise NotImplementedError("Use test() method instead.")

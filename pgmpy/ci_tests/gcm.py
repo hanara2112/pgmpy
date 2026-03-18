@@ -48,7 +48,6 @@ class GCM(_BaseCITest):
         X: str,
         Y: str,
         Z: list,
-        **kwargs,
     ) -> None:
         """
         Compute GCM statistic and p-value.

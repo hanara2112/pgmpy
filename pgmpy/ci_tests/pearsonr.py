@@ -47,7 +47,6 @@ class Pearsonr(_BaseCITest):
         X: str,
         Y: str,
         Z: list,
-        **kwargs,
     ) -> None:
         """
         Compute Pearson correlation coefficient and p-value.

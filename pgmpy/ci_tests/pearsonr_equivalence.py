@@ -54,7 +54,6 @@ class PearsonrEquivalence(Pearsonr):
         Y: str,
         Z: Optional[list] = None,
         significance_level: float = 0.05,
-        **kwargs,
     ) -> bool:
         """
         Perform the equivalence CI test.
@@ -71,7 +70,7 @@ class PearsonrEquivalence(Pearsonr):
             raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
         self._validate_inputs(X, Y, Z)
 
-        self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
+        self._compute_statistic(X=X, Y=Y, Z=Z)
 
         return self.p_value_ < significance_level
 
@@ -80,7 +79,6 @@ class PearsonrEquivalence(Pearsonr):
         X: str,
         Y: str,
         Z: list,
-        **kwargs,
     ) -> None:
         """
         Compute Pearson equivalence statistic and p-value.
@@ -88,7 +86,7 @@ class PearsonrEquivalence(Pearsonr):
         Sets ``self.statistic_`` (Fisher z-transformed partial correlation) and ``self.p_value_``.
         """
         # Step 2: Compute Partial Pearson Correlation via parent and clip to avoid infinities
-        super()._compute_statistic(X, Y, Z, **kwargs)
+        super()._compute_statistic(X, Y, Z)
         rho = np.clip(self.statistic_, -0.999999, 0.999999)
 
         # Step 3: Fisher Z-Transformation

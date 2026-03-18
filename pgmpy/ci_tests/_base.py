@@ -7,8 +7,7 @@ from skbase.lookup import all_objects
 
 class _BaseCITest(BaseObject):
     """
-    Base class for all Conditional Independence (CI) tests.
-    Subclasses must implement `_compute_statistic`.
+    Base class for all Conditional Independence (CI) tests. Subclasses must implement `_compute_statistic`.
     """
 
     _tags = {
@@ -24,15 +23,8 @@ class _BaseCITest(BaseObject):
         Y: str,
         Z: Union[list, tuple] = (),
         significance_level: float = 0.05,
-        **kwargs,
     ):
-        return self.test(
-            X=X,
-            Y=Y,
-            Z=Z,
-            significance_level=significance_level,
-            **kwargs,
-        )
+        return self.test(X=X, Y=Y, Z=Z, significance_level=significance_level)
 
     def test(
         self,
@@ -40,7 +32,6 @@ class _BaseCITest(BaseObject):
         Y: str,
         Z: Union[list, tuple] = (),
         significance_level: float = 0.05,
-        **kwargs,
     ) -> bool:
         """
         Perform the conditional independence test.
@@ -56,13 +47,11 @@ class _BaseCITest(BaseObject):
             Default is an empty tuple.
         significance_level : float, default=0.05
             The significance level for the test.
-        **kwargs
-            Additional arguments specific to the CI test implementation.
 
         Returns
         -------
         bool
-            True if X ⊥⊥ Y | Z (p_value_ >= significance_level), else False.
+            True if X _|_ Y | Z (p_value_ >= significance_level), else False.
 
         Raises
         ------
@@ -81,7 +70,7 @@ class _BaseCITest(BaseObject):
             raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
         self._validate_inputs(X, Y, Z)
 
-        self._compute_statistic(X=X, Y=Y, Z=Z, **kwargs)
+        self._compute_statistic(X=X, Y=Y, Z=Z)
 
         return self.p_value_ >= significance_level
 
@@ -105,26 +94,84 @@ class _BaseCITest(BaseObject):
                 raise ValueError(f"Missing columns in data: {missing}")
 
 
-def _instantiate_ci_test(cls, data=None):
-    """
-    Helper to instantiate a CI test class, respecting whether it requires data.
-    """
-    requires_data = cls.get_class_tag("requires_data", tag_value_default=True)
-    if requires_data:
-        if data is None:
-            raise ValueError(
-                f"CI test '{cls.__name__}' requires data, but data is None."
-            )
-        return cls(data=data)
-    return cls()
-
-
 def get_ci_test(test=None, data=None):
     """
-    Retrieve CI test instance by name or infer default from data.
+    Return an instantiated CI test object given a test name, class, instance, or data.
+
+    This is the recommended factory for obtaining a CI test. It supports four calling
+    patterns:
+
+    1. **Pass-through**: if ``test`` is already a :class:`_BaseCITest` instance, it is
+       returned as-is.
+    2. **Callable**: if ``test`` is any other callable (e.g. a legacy function), it is
+       returned as-is.
+    3. **By name**: if ``test`` is a string, the registered CI test whose ``name`` tag
+       matches (case-insensitive) is instantiated and returned.
+    4. **Auto-detect**: if ``test`` is ``None``, the default CI test for the data type
+       inferred from ``data`` is instantiated and returned.
+
+    Parameters
+    ----------
+    test : str, _BaseCITest instance, callable, or None
+        The CI test to retrieve. If a string, must match the ``name`` tag of a
+        registered CI test (e.g. ``"chi_square"``, ``"pearsonr"``). If ``None``,
+        the default test for the data type of ``data`` is used.
+    data : pandas.DataFrame or None
+        The dataset to pass to the CI test constructor. Required when ``test`` is
+        ``None`` or when the resolved test has ``requires_data=True``.
+
+    Returns
+    -------
+    _BaseCITest or callable
+        An instantiated CI test object ready to call, or the original callable if
+        ``test`` was already callable.
+
+    Raises
+    ------
+    ValueError
+        If ``test`` is ``None`` and ``data`` is also ``None``.
+    ValueError
+        If ``test`` is a string that does not match any registered CI test name.
+    ValueError
+        If the resolved CI test requires data but ``data`` is ``None``.
+    ValueError
+        If ``test`` is not a string, ``_BaseCITest`` instance, callable, or ``None``.
+
+    Examples
+    --------
+    Get the default CI test for a continuous dataset (returns :class:`Pearsonr`):
+
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> np.random.seed(42)
+    >>> data = pd.DataFrame(np.random.randn(100, 3), columns=["X", "Y", "Z"])
+    >>> test = get_ci_test(data=data)
+    >>> isinstance(test, Pearsonr)
+    True
+
+    Get a CI test by name:
+
+    >>> test = get_ci_test(test="chi_square", data=data)
+    >>> isinstance(test, ChiSquare)
+    True
+
+    Pass an already-instantiated CI test (returned unchanged):
+
+    >>> existing = Pearsonr(data=data)
+    >>> get_ci_test(test=existing) is existing
+    True
     """
 
     from pgmpy.utils import get_dataset_type
+
+    def instantiate(cls):
+        if cls.get_class_tag("requires_data", tag_value_default=True):
+            if data is None:
+                raise ValueError(
+                    f"CI test '{cls.__name__}' requires data, but data is None."
+                )
+            return cls(data=data)
+        return cls()
 
     if isinstance(test, _BaseCITest):
         return test
@@ -148,7 +195,7 @@ def get_ci_test(test=None, data=None):
         )
 
         if tests:
-            return _instantiate_ci_test(tests[0], data=data)
+            return instantiate(tests[0])
 
         raise ValueError(f"No default CI test found for data type '{var_type}'.")
 
@@ -161,7 +208,7 @@ def get_ci_test(test=None, data=None):
         )
 
         if tests:
-            return _instantiate_ci_test(tests[0], data=data)
+            return instantiate(tests[0])
 
         raise ValueError(f"Unknown CI test: {test!r}")
 

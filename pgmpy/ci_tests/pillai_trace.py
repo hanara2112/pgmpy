@@ -97,7 +97,6 @@ class PillaiTrace(_BaseCITest):
         X: str,
         Y: str,
         Z: list,
-        **kwargs,
     ) -> None:
         """
         Compute Pillai's trace statistic and p-value.

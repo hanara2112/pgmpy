@@ -80,7 +80,6 @@ class PowerDivergence(_BaseCITest):
         X: str,
         Y: str,
         Z: list,
-        **kwargs,
     ) -> None:
         """
         Compute power divergence statistic, p-value, and degrees of freedom.
