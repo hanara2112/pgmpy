@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Union
 
 from pgmpy.independencies import IndependenceAssertion
 
@@ -33,7 +33,7 @@ class IndependenceMatch(_BaseCITest):
         self,
         X: str,
         Y: str,
-        Z: Optional[list] = None,
+        Z: Union[list, tuple] = (),
         significance_level: float = 0.05,
     ) -> bool:
         """
@@ -44,15 +44,9 @@ class IndependenceMatch(_BaseCITest):
         bool
             True if the independence assertion is present in `independencies`, else False.
         """
-        if not isinstance(Z, (list, tuple)):
-            raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
         self._validate_inputs(X, Y, Z)
 
         if self.independencies is None:
             raise ValueError("independencies must be provided in __init__.")
 
-        return IndependenceAssertion(X, Y, Z) in self.independencies
-
-    def _compute_statistic(self, X, Y, Z):
-        """Not used for IndependenceMatch as it returns boolean directly."""
-        raise NotImplementedError("Use test() method instead.")
+        return IndependenceAssertion(X, Y, list(Z)) in self.independencies

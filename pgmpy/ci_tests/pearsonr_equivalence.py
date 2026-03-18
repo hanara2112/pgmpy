@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -52,7 +52,7 @@ class PearsonrEquivalence(Pearsonr):
         self,
         X: str,
         Y: str,
-        Z: Optional[list] = None,
+        Z: Union[list, tuple] = (),
         significance_level: float = 0.05,
     ) -> bool:
         """
@@ -66,11 +66,9 @@ class PearsonrEquivalence(Pearsonr):
         bool
             True if X ⊥⊥ Y | Z (p_value_ < significance_level), else False.
         """
-        if not isinstance(Z, (list, tuple)):
-            raise ValueError(f"Z must be a list or tuple. Got {type(Z)}.")
         self._validate_inputs(X, Y, Z)
 
-        self._compute_statistic(X=X, Y=Y, Z=Z)
+        self._compute_statistic(X=X, Y=Y, Z=list(Z))
 
         return self.p_value_ < significance_level
 

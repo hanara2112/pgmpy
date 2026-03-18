@@ -69,6 +69,11 @@ class _BaseCITest(BaseObject):
 
         return self.p_value_ >= significance_level
 
+    def _compute_statistic(self, X, Y, Z):
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _compute_statistic."
+        )
+
     def _validate_inputs(self, X, Y, Z):
         if X == Y:
             raise ValueError("X and Y must be different variables.")
