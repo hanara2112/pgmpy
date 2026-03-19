@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy import stats
+from sklearn.base import clone
 from sklearn.cross_decomposition import CCA
 
 from ._base import _BaseCITest
@@ -10,8 +11,9 @@ class PillaiTrace(_BaseCITest):
     """
     A mixed-data residualization based conditional independence test[1].
 
-    Uses XGBoost estimator to compute LS residuals[2], and then does an
-    association test (Pillai's Trace) on the residuals.
+    Uses an estimator to compute LS residuals[2], and then does an
+    association test (Pillai's Trace) on the residuals. By default uses
+    XGBoost, but any sklearn-compatible estimator can be provided.
 
     Parameters
     ----------
@@ -19,7 +21,16 @@ class PillaiTrace(_BaseCITest):
         The dataset in which to test the independence condition.
 
     seed : int, optional
-        Random seed used for the underlying XGBoost models.
+        Random seed used for the underlying XGBoost models. Only used when
+        ``estimator`` is ``None``.
+
+    estimator : sklearn estimator instance, optional
+        An sklearn-compatible estimator to use for computing residuals. If
+        ``None`` (default), uses XGBoost (``XGBClassifier`` for categorical
+        targets, ``XGBRegressor`` for continuous). When provided, the
+        estimator must have a ``predict_proba`` method if any of the test
+        variables (X or Y) are categorical. A fresh clone of the estimator
+        is used for each variable to avoid state leakage.
 
     Attributes
     ----------
@@ -46,16 +57,23 @@ class PillaiTrace(_BaseCITest):
         "requires_data": True,
     }
 
-    def __init__(self, data: pd.DataFrame, seed=None):
+    def __init__(self, data: pd.DataFrame, seed=None, estimator=None):
         self.seed = seed
+        self.estimator = estimator
         self.data = data
         super().__init__()
 
     def _get_predictions(self, X, Y, Z, data):
         """
-        Get XGBoost predictions for X and Y given Z.
-        Uses ``self.seed`` for reproducibility.
+        Get predictions for X and Y given Z.
+
+        Uses the user-provided ``self.estimator`` if set, otherwise falls
+        back to XGBoost. Uses ``self.seed`` for reproducibility when using
+        XGBoost.
         """
+        if self.estimator is not None:
+            return self._get_predictions_custom(X, Y, Z, data)
+
         try:
             from xgboost import XGBClassifier, XGBRegressor
         except ImportError as e:
@@ -84,6 +102,44 @@ class PillaiTrace(_BaseCITest):
             else:
                 model.fit(data.loc[:, Z], target_data)
                 pred = model.predict(data.loc[:, Z])
+
+            return pred, cat_index
+
+        pred_x, x_cat_index = fit_predict(X)
+        pred_y, y_cat_index = fit_predict(Y)
+
+        return pred_x, pred_y, x_cat_index, y_cat_index
+
+    def _get_predictions_custom(self, X, Y, Z, data):
+        """
+        Get predictions using a user-provided sklearn estimator.
+
+        Uses ``sklearn.base.clone`` to create independent copies for X and Y
+        fits. Validates that the estimator has ``predict_proba`` for any
+        categorical target variables. Categorical Z columns are one-hot encoded
+        since most sklearn estimators do not handle them natively.
+        """
+        # One-hot encode categorical Z columns for sklearn compatibility
+        Z_data = pd.get_dummies(data.loc[:, Z])
+
+        def fit_predict(target_col):
+            est = clone(self.estimator)
+            is_cat = data.loc[:, target_col].dtype == "category"
+            target_data = data.loc[:, target_col]
+            cat_index = None
+
+            if is_cat:
+                if not hasattr(est, "predict_proba"):
+                    raise ValueError(
+                        f"The provided estimator ({type(est).__name__}) must have a "
+                        f"`predict_proba` method for discrete variable '{target_col}'."
+                    )
+                y_encoded, cat_index = pd.factorize(target_data)
+                est.fit(Z_data, y_encoded)
+                pred = est.predict_proba(Z_data)
+            else:
+                est.fit(Z_data, target_data)
+                pred = est.predict(Z_data)
 
             return pred, cat_index
 
