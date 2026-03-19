@@ -222,3 +222,58 @@ class TestPillaiTrace(unittest.TestCase):
             np.allclose(computed_pvalues, dep_pvalues, rtol=1e-2, atol=1e-2),
             msg=f"Conditional (dep) p-values mismatch at index {i}: {computed_pvalues} != {dep_pvalues}",
         )
+
+    def test_pillai_custom_estimator_continuous(self):
+        """Test PillaiTrace with a custom sklearn estimator on continuous data."""
+        from sklearn.ensemble import GradientBoostingRegressor
+
+        estimator = GradientBoostingRegressor(n_estimators=50, random_state=42)
+
+        # Independent case
+        test_indep = PillaiTrace(data=self.df_indep, estimator=estimator)
+        result_indep = test_indep("X", "Y", ["Z1", "Z2", "Z3"])
+
+        self.assertIsInstance(result_indep, (bool, np.bool_))
+        self.assertTrue(
+            test_indep.p_value_ > 0.05,
+            msg=f"Expected independence (high p-value), got {test_indep.p_value_}"
+        )
+
+        # Dependent case
+        test_dep = PillaiTrace(data=self.df_dep, estimator=estimator)
+        result_dep = test_dep("X", "Y", ["Z1", "Z2", "Z3"])
+
+        self.assertIsInstance(result_dep, (bool, np.bool_))
+        self.assertTrue(
+            test_dep.p_value_ < 0.05,
+            msg=f"Expected dependence (low p-value), got {test_dep.p_value_}"
+        )
+
+    def test_pillai_custom_estimator_discrete(self):
+        """Test PillaiTrace with a classifier (predict_proba) on categorical data."""
+        from sklearn.ensemble import RandomForestClassifier
+
+        estimator = RandomForestClassifier(n_estimators=50, random_state=42)
+
+        test = PillaiTrace(data=self.df_indep_cat_cat, estimator=estimator)
+        result = test("X", "Y", ["Z1", "Z2", "Z3"])
+
+        # Ensure it runs and returns a valid boolean
+        self.assertIsInstance(result, (bool, np.bool_))
+
+        # Optional stronger check if data is known independent
+        self.assertTrue(
+            test.p_value_ > 0.05,
+            msg=f"Expected independence (high p-value), got {test.p_value_}"
+        )
+
+    def test_pillai_custom_estimator_no_predict_proba(self):
+        """Test that ValueError is raised when estimator lacks predict_proba for discrete variable."""
+        from sklearn.linear_model import LinearRegression
+
+        estimator = LinearRegression()
+
+        test = PillaiTrace(data=self.df_indep_cat_cat, estimator=estimator)
+
+        with self.assertRaisesRegex(ValueError, "predict_proba"):
+            test("X", "Y", ["Z1", "Z2", "Z3"])
