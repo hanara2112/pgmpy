@@ -225,8 +225,7 @@ class TestPillaiTrace(unittest.TestCase):
 
         self.assertIsInstance(result_indep, (bool, np.bool_))
         self.assertTrue(
-            test_indep.p_value_ > 0.05,
-            msg=f"Expected independence (high p-value), got {test_indep.p_value_}"
+            test_indep.p_value_ > 0.05, msg=f"Expected independence (high p-value), got {test_indep.p_value_}"
         )
 
         # Dependent case
@@ -234,10 +233,7 @@ class TestPillaiTrace(unittest.TestCase):
         result_dep = test_dep("X", "Y", ["Z1", "Z2", "Z3"])
 
         self.assertIsInstance(result_dep, (bool, np.bool_))
-        self.assertTrue(
-            test_dep.p_value_ < 0.05,
-            msg=f"Expected dependence (low p-value), got {test_dep.p_value_}"
-        )
+        self.assertTrue(test_dep.p_value_ < 0.05, msg=f"Expected dependence (low p-value), got {test_dep.p_value_}")
 
     def test_pillai_custom_estimator_discrete(self):
         """Test PillaiTrace with a classifier (predict_proba) on categorical data."""
@@ -252,10 +248,7 @@ class TestPillaiTrace(unittest.TestCase):
         self.assertIsInstance(result, (bool, np.bool_))
 
         # Optional stronger check if data is known independent
-        self.assertTrue(
-            test.p_value_ > 0.05,
-            msg=f"Expected independence (high p-value), got {test.p_value_}"
-        )
+        self.assertTrue(test.p_value_ > 0.05, msg=f"Expected independence (high p-value), got {test.p_value_}")
 
     def test_pillai_custom_estimator_no_predict_proba(self):
         """Test that ValueError is raised when estimator lacks predict_proba for discrete variable."""
