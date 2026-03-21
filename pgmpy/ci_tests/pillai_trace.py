@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy import stats
+from skbase.utils.dependencies import _safe_import
 from sklearn.base import clone
 from sklearn.cross_decomposition import CCA
 
@@ -24,8 +25,9 @@ class PillaiTrace(_BaseCITest):
         Random seed used for the underlying XGBoost models. Only used when
         ``estimator`` is ``None``.
 
-    estimator : sklearn estimator instance, optional
-        An sklearn-compatible estimator to use for computing residuals. If
+    estimator : estimator instance, optional
+        Any estimator with `fit`, `predict`, and `predict_proba` (if testing
+        discrete variables) methods. If
         ``None`` (default), uses XGBoost (``XGBClassifier`` for categorical
         targets, ``XGBRegressor`` for continuous). When provided, the
         estimator must have a ``predict_proba`` method if any of the test
@@ -73,16 +75,15 @@ class PillaiTrace(_BaseCITest):
         """
 
         if self.estimator is None:
-            try:
-                from xgboost import XGBClassifier, XGBRegressor
-            except ImportError as e:
-                raise ImportError(
-                    f"{e}. xgboost is required for using pillai_trace test. Please install using: pip install xgboost"
-                ) from None
+            xgboost = _safe_import("xgboost")
+            XGBClassifier = xgboost.XGBClassifier
+            XGBRegressor = xgboost.XGBRegressor
 
         # Sklearn estimators do not natively handle pandas categories, so one-hot encode Z
         if self.estimator is not None:
-            Z_data = pd.get_dummies(data.loc[:, Z])
+            # Explicitly select only category/object columns to dummy encode, leaving continuous variables untouched.
+            cat_cols = data.loc[:, Z].select_dtypes(include=["category", "object"]).columns
+            Z_data = pd.get_dummies(data.loc[:, Z], columns=cat_cols)
             enable_categorical = False
         else:
             Z_data = data.loc[:, Z]
