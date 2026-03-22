@@ -10,7 +10,6 @@ from pgmpy.factors.continuous import LinearGaussianCPD
 from pgmpy.models import LinearGaussianBayesianNetwork
 
 
-@unittest.skipIf(os.getenv("GITHUB_ACTIONS") == "true", "Skipping residual tests on GitHub Actions.")
 class TestPillaiTrace(unittest.TestCase):
     def setUp(self):
         self.model_indep = LinearGaussianBayesianNetwork(
@@ -112,6 +111,7 @@ class TestPillaiTrace(unittest.TestCase):
         self.df_dep_ord_cont = self.df_dep_cont_cont.copy()
         self.df_dep_ord_cont.X = pd.cut(self.df_dep_ord_cont.X, bins=4)
 
+    @unittest.skipIf(os.getenv("GITHUB_ACTIONS") == "true", "Skipping residual tests on GitHub Actions.")
     @unittest.skipUnless(
         _check_soft_dependencies("xgboost", severity="none"),
         reason="execute only if required dependency present",
@@ -136,6 +136,7 @@ class TestPillaiTrace(unittest.TestCase):
         self.assertTrue(np.all(np.array(computed_coefs) >= 0.1))
         self.assertTrue(np.all(np.array(computed_pvalues) <= 0.05))
 
+    @unittest.skipIf(os.getenv("GITHUB_ACTIONS") == "true", "Skipping residual tests on GitHub Actions.")
     @unittest.skipUnless(
         _check_soft_dependencies("xgboost", severity="none"),
         reason="execute only if required dependency present",
@@ -160,6 +161,7 @@ class TestPillaiTrace(unittest.TestCase):
         self.assertTrue(np.all(np.array(computed_coefs) <= 0.1))
         self.assertTrue(np.all(np.array(computed_pvalues) >= 0.05))
 
+    @unittest.skipIf(os.getenv("GITHUB_ACTIONS") == "true", "Skipping residual tests on GitHub Actions.")
     @unittest.skipUnless(
         _check_soft_dependencies("xgboost", severity="none"),
         reason="execute only if required dependency present",
