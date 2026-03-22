@@ -53,12 +53,9 @@ class PillaiTrace(_BaseCITest):
 
     estimator : estimator instance, optional
         Any estimator with `fit`, `predict`, and `predict_proba` (if testing
-        discrete variables) methods. If
-        ``None`` (default), uses XGBoost (``XGBClassifier`` for categorical
-        targets, ``XGBRegressor`` for continuous). When provided, the
-        estimator must have a ``predict_proba`` method if any of the test
-        variables (X or Y) are categorical. A fresh clone of the estimator
-        is used for each variable to avoid state leakage.
+        discrete variables) methods. If ``None`` (default), uses XGBoost
+        (``XGBClassifier`` for categorical targets, ``XGBRegressor`` for
+        continuous).
 
     Attributes
     ----------
@@ -91,6 +88,37 @@ class PillaiTrace(_BaseCITest):
         self.data = data
         super().__init__()
 
+    def _fit_predict(self, data, target_col, Z_data, enable_categorical):
+        is_cat = data.loc[:, target_col].dtype == "category"
+        target_data = data.loc[:, target_col]
+        cat_index = None
+
+        if self.estimator is not None:
+            model = clone(self.estimator)
+        else:
+            xgboost = _safe_import("xgboost")
+            model_cls = xgboost.XGBClassifier if is_cat else xgboost.XGBRegressor
+            model = model_cls(
+                enable_categorical=enable_categorical,
+                seed=self.seed,
+                random_state=self.seed,
+            )
+
+        if is_cat:
+            if self.estimator is not None and not hasattr(model, "predict_proba"):
+                raise ValueError(
+                    f"The provided estimator ({type(model).__name__}) must have a "
+                    f"`predict_proba` method for discrete variable '{target_col}'."
+                )
+            y_encoded, cat_index = pd.factorize(target_data)
+            model.fit(Z_data, y_encoded)
+            pred = model.predict_proba(Z_data)
+        else:
+            model.fit(Z_data, target_data)
+            pred = model.predict(Z_data)
+
+        return pred, cat_index
+
     def _get_predictions(self, X, Y, Z, data):
         """
         Get predictions for X and Y given Z.
@@ -99,12 +127,6 @@ class PillaiTrace(_BaseCITest):
         back to XGBoost. Uses ``self.seed`` for reproducibility when using
         XGBoost.
         """
-
-        if self.estimator is None:
-            xgboost = _safe_import("xgboost")
-            XGBClassifier = xgboost.XGBClassifier
-            XGBRegressor = xgboost.XGBRegressor
-
         # Sklearn estimators do not natively handle pandas categories, so one-hot encode Z
         if self.estimator is not None:
             # Explicitly select only category/object columns to dummy encode, leaving continuous variables untouched.
@@ -115,38 +137,8 @@ class PillaiTrace(_BaseCITest):
             Z_data = data.loc[:, Z]
             enable_categorical = any(Z_data.dtypes == "category")
 
-        def fit_predict(target_col):
-            is_cat = data.loc[:, target_col].dtype == "category"
-            target_data = data.loc[:, target_col]
-            cat_index = None
-
-            if self.estimator is not None:
-                model = clone(self.estimator)
-            else:
-                model_cls = XGBClassifier if is_cat else XGBRegressor
-                model = model_cls(
-                    enable_categorical=enable_categorical,
-                    seed=self.seed,
-                    random_state=self.seed,
-                )
-
-            if is_cat:
-                if self.estimator is not None and not hasattr(model, "predict_proba"):
-                    raise ValueError(
-                        f"The provided estimator ({type(model).__name__}) must have a "
-                        f"`predict_proba` method for discrete variable '{target_col}'."
-                    )
-                y_encoded, cat_index = pd.factorize(target_data)
-                model.fit(Z_data, y_encoded)
-                pred = model.predict_proba(Z_data)
-            else:
-                model.fit(Z_data, target_data)
-                pred = model.predict(Z_data)
-
-            return pred, cat_index
-
-        pred_x, x_cat_index = fit_predict(X)
-        pred_y, y_cat_index = fit_predict(Y)
+        pred_x, x_cat_index = self._fit_predict(data, X, Z_data, enable_categorical)
+        pred_y, y_cat_index = self._fit_predict(data, Y, Z_data, enable_categorical)
 
         return pred_x, pred_y, x_cat_index, y_cat_index
 
