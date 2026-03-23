@@ -123,14 +123,12 @@ class CorrelationScore(_BaseUnsupervisedMetric):
             )
             d_connected = not causal_graph.is_dconnected(start=i, end=j)
 
-            results.append(
-                {
-                    "var1": i,
-                    "var2": j,
-                    "stat_test": test_result,
-                    "d_connected": d_connected,
-                }
-            )
+            results.append({
+                "var1": i,
+                "var2": j,
+                "stat_test": test_result,
+                "d_connected": d_connected,
+            })
 
         results = pd.DataFrame(results)
 

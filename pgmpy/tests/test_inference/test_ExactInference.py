@@ -340,14 +340,12 @@ class TestVariableElimination(unittest.TestCase):
 
 class TestSnowNetwork(unittest.TestCase):
     def setUp(self):
-        self.model = DiscreteBayesianNetwork(
-            [
-                ("Snow", "Risk"),
-                ("Snow", "Traffic"),
-                ("Traffic", "Late"),
-                ("Risk", "Late"),
-            ]
-        )
+        self.model = DiscreteBayesianNetwork([
+            ("Snow", "Risk"),
+            ("Snow", "Traffic"),
+            ("Traffic", "Late"),
+            ("Risk", "Late"),
+        ])
 
         cpd_snow = TabularCPD("Snow", 2, [[0.4], [0.6]], state_names={"Snow": ["yes", "no"]})
         cpd_risk = TabularCPD(
@@ -564,17 +562,15 @@ class TestVariableEliminationMarkov(unittest.TestCase):
     def setUp(self):
         # It is just a moralised version of the above Bayesian network so all the results are same. Only factors
         # are under consideration for inference so this should be fine.
-        self.markov_model = DiscreteMarkovNetwork(
-            [
-                ("A", "J"),
-                ("R", "J"),
-                ("J", "Q"),
-                ("J", "L"),
-                ("G", "L"),
-                ("A", "R"),
-                ("J", "G"),
-            ]
-        )
+        self.markov_model = DiscreteMarkovNetwork([
+            ("A", "J"),
+            ("R", "J"),
+            ("J", "Q"),
+            ("J", "L"),
+            ("G", "L"),
+            ("A", "R"),
+            ("J", "G"),
+        ])
 
         factor_a = TabularCPD("A", 2, values=[[0.2], [0.8]]).to_factor()
         factor_r = TabularCPD("R", 2, values=[[0.4], [0.6]]).to_factor()
@@ -989,17 +985,15 @@ class TestBeliefPropagationWithMessagePassing(unittest.TestCase):
 
         self.factor_graph.add_factors(phi1, phi2, phi3, phi4)
 
-        self.factor_graph.add_edges_from(
-            [
-                (phi1, "A"),
-                ("A", phi2),
-                (phi2, "B"),
-                ("B", phi3),
-                (phi3, "C"),
-                ("B", phi4),
-                (phi4, "D"),
-            ]
-        )
+        self.factor_graph.add_edges_from([
+            (phi1, "A"),
+            ("A", phi2),
+            (phi2, "B"),
+            ("B", phi3),
+            (phi3, "C"),
+            ("B", phi4),
+            (phi4, "D"),
+        ])
 
         self.belief_propagation = BeliefPropagationWithMessagePassing(self.factor_graph)
 

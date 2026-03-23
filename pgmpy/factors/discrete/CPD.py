@@ -670,12 +670,10 @@ class TabularCPD(DiscreteFactor):
                     return self.get_values()
                 else:
                     return new_values.reshape(
-                        tuple(
-                            [
-                                self.cardinality[0],
-                                np.prod([card_map[var] for var in new_order]),
-                            ]
-                        )
+                        tuple([
+                            self.cardinality[0],
+                            np.prod([card_map[var] for var in new_order]),
+                        ])
                     )
             else:
                 logger.warning("Same ordering provided as current")

@@ -291,34 +291,30 @@ class TestBackdoorPaths(unittest.TestCase):
         self.assertEqual(deconfounders, frozenset())
 
     def test_game2_bn(self):
-        game2 = DiscreteBayesianNetwork(
-            [
-                ("X", "E"),
-                ("E", "Y"),
-                ("A", "B"),
-                ("A", "X"),
-                ("B", "C"),
-                ("D", "B"),
-                ("D", "E"),
-            ]
-        )
+        game2 = DiscreteBayesianNetwork([
+            ("X", "E"),
+            ("E", "Y"),
+            ("A", "B"),
+            ("A", "X"),
+            ("B", "C"),
+            ("D", "B"),
+            ("D", "E"),
+        ])
         inference = CausalInference(game2)
         self.assertTrue(inference.is_valid_backdoor_adjustment_set("X", "Y"))
         deconfounders = inference.get_all_backdoor_adjustment_sets("X", "Y")
         self.assertEqual(deconfounders, frozenset())
 
     def test_game2_sem(self):
-        game2 = SEMGraph(
-            [
-                ("X", "E"),
-                ("E", "Y"),
-                ("A", "B"),
-                ("A", "X"),
-                ("B", "C"),
-                ("D", "B"),
-                ("D", "E"),
-            ]
-        )
+        game2 = SEMGraph([
+            ("X", "E"),
+            ("E", "Y"),
+            ("A", "B"),
+            ("A", "X"),
+            ("B", "C"),
+            ("D", "B"),
+            ("D", "E"),
+        ])
         inference = CausalInference(game2)
         self.assertTrue(inference.is_valid_backdoor_adjustment_set("X", "Y"))
         deconfounders = inference.get_all_backdoor_adjustment_sets("X", "Y")
@@ -367,63 +363,55 @@ class TestBackdoorPaths(unittest.TestCase):
         self.assertEqual(deconfounders, frozenset({frozenset({"C"}), frozenset({"A", "B"})}))
 
     def test_game6_bn(self):
-        game6 = DiscreteBayesianNetwork(
-            [
-                ("X", "F"),
-                ("C", "X"),
-                ("A", "C"),
-                ("A", "D"),
-                ("B", "D"),
-                ("B", "E"),
-                ("D", "X"),
-                ("D", "Y"),
-                ("E", "Y"),
-                ("F", "Y"),
-            ]
-        )
+        game6 = DiscreteBayesianNetwork([
+            ("X", "F"),
+            ("C", "X"),
+            ("A", "C"),
+            ("A", "D"),
+            ("B", "D"),
+            ("B", "E"),
+            ("D", "X"),
+            ("D", "Y"),
+            ("E", "Y"),
+            ("F", "Y"),
+        ])
         inference = CausalInference(game6)
         self.assertFalse(inference.is_valid_backdoor_adjustment_set("X", "Y"))
         deconfounders = inference.get_all_backdoor_adjustment_sets("X", "Y")
         self.assertEqual(
             deconfounders,
-            frozenset(
-                {
-                    frozenset({"C", "D"}),
-                    frozenset({"A", "D"}),
-                    frozenset({"D", "E"}),
-                    frozenset({"B", "D"}),
-                }
-            ),
+            frozenset({
+                frozenset({"C", "D"}),
+                frozenset({"A", "D"}),
+                frozenset({"D", "E"}),
+                frozenset({"B", "D"}),
+            }),
         )
 
     def test_game6_sem(self):
-        game6 = SEMGraph(
-            [
-                ("X", "F"),
-                ("C", "X"),
-                ("A", "C"),
-                ("A", "D"),
-                ("B", "D"),
-                ("B", "E"),
-                ("D", "X"),
-                ("D", "Y"),
-                ("E", "Y"),
-                ("F", "Y"),
-            ]
-        )
+        game6 = SEMGraph([
+            ("X", "F"),
+            ("C", "X"),
+            ("A", "C"),
+            ("A", "D"),
+            ("B", "D"),
+            ("B", "E"),
+            ("D", "X"),
+            ("D", "Y"),
+            ("E", "Y"),
+            ("F", "Y"),
+        ])
         inference = CausalInference(game6)
         self.assertFalse(inference.is_valid_backdoor_adjustment_set("X", "Y"))
         deconfounders = inference.get_all_backdoor_adjustment_sets("X", "Y")
         self.assertEqual(
             deconfounders,
-            frozenset(
-                {
-                    frozenset({"C", "D"}),
-                    frozenset({"A", "D"}),
-                    frozenset({"D", "E"}),
-                    frozenset({"B", "D"}),
-                }
-            ),
+            frozenset({
+                frozenset({"C", "D"}),
+                frozenset({"A", "D"}),
+                frozenset({"D", "E"}),
+                frozenset({"B", "D"}),
+            }),
         )
 
 

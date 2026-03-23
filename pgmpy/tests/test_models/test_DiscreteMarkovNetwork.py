@@ -320,14 +320,12 @@ class TestUndirectedGraphFactorOperations(unittest.TestCase):
         self.graph = DiscreteMarkovNetwork()
 
     def test_add_factor_raises_error(self):
-        self.graph.add_edges_from(
-            [
-                ("Alice", "Bob"),
-                ("Bob", "Charles"),
-                ("Charles", "Debbie"),
-                ("Debbie", "Alice"),
-            ]
-        )
+        self.graph.add_edges_from([
+            ("Alice", "Bob"),
+            ("Bob", "Charles"),
+            ("Charles", "Debbie"),
+            ("Debbie", "Alice"),
+        ])
         factor = DiscreteFactor(["Alice", "Bob", "John"], [2, 2, 2], np.random.rand(8))
         self.assertRaises(ValueError, self.graph.add_factors, factor)
 

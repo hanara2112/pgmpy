@@ -266,14 +266,12 @@ class TestAncestralBase:
         assert dag_str[-1] == "}"
 
     def test_to_dagitty_complex(self):
-        graph = AncestralBase(
-            [
-                ("A", "B", "o", ">"),
-                ("B", "C", "-", ">"),
-                ("C", "D", ">", ">"),
-                ("C", "E", "o", "o"),
-            ]
-        )
+        graph = AncestralBase([
+            ("A", "B", "o", ">"),
+            ("B", "C", "-", ">"),
+            ("C", "D", ">", ">"),
+            ("C", "E", "o", "o"),
+        ])
         graph.outcomes = {"D", "E"}
         graph.latents = {"A"}
         dag_str = graph.to_dagitty()

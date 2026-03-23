@@ -327,17 +327,15 @@ class TestFBNMethods(unittest.TestCase):
         sim_model = load_model("bnlearn/ecoli70")
         df = sim_model.simulate(n_samples=int(1e3), seed=42)
 
-        model = FunctionalBayesianNetwork(
-            [
-                ("b1191", "fixC"),
-                ("fixC", "ygbD"),
-                ("fixC", "yjbO"),
-                ("fixC", "yceP"),
-                ("yceP", "ibpB"),
-                ("eutG", "yceP"),
-                ("eutG", "ibpB"),
-            ]
-        )
+        model = FunctionalBayesianNetwork([
+            ("b1191", "fixC"),
+            ("fixC", "ygbD"),
+            ("fixC", "yjbO"),
+            ("fixC", "yceP"),
+            ("yceP", "ibpB"),
+            ("eutG", "yceP"),
+            ("eutG", "ibpB"),
+        ])
         df = df.loc[:, list(model.nodes())]
 
         def fn_b1191_param(parents):
@@ -490,17 +488,15 @@ class TestFBNMethods(unittest.TestCase):
         sim_model = load_model("bnlearn/ecoli70")
         df = sim_model.simulate(n_samples=int(1e3), seed=42)
 
-        model = FunctionalBayesianNetwork(
-            [
-                ("b1191", "fixC"),
-                ("fixC", "ygbD"),
-                ("fixC", "yjbO"),
-                ("fixC", "yceP"),
-                ("yceP", "ibpB"),
-                ("eutG", "yceP"),
-                ("eutG", "ibpB"),
-            ]
-        )
+        model = FunctionalBayesianNetwork([
+            ("b1191", "fixC"),
+            ("fixC", "ygbD"),
+            ("fixC", "yjbO"),
+            ("fixC", "yceP"),
+            ("yceP", "ibpB"),
+            ("eutG", "yceP"),
+            ("eutG", "ibpB"),
+        ])
         df = df.loc[:, list(model.nodes())]
 
         def t(v):
@@ -696,13 +692,11 @@ class TestFBNSimulation(unittest.TestCase):
             )
 
     def test_simulate_different_distributions(self):
-        model = FunctionalBayesianNetwork(
-            [
-                ("exponential", "uniform"),
-                ("uniform", "lognormal"),
-                ("lognormal", "gamma"),
-            ]
-        )
+        model = FunctionalBayesianNetwork([
+            ("exponential", "uniform"),
+            ("uniform", "lognormal"),
+            ("lognormal", "gamma"),
+        ])
 
         cpd1 = FunctionalCPD("exponential", lambda _: dist.Exponential(0.5))
 

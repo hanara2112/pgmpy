@@ -190,9 +190,9 @@ class MaximumLikelihoodEstimator(ParameterEstimator):
         # Get the state names for the CPD
         state_names = {node: list(state_counts.index)}
         if parents:
-            state_names.update(
-                {state_counts.columns.names[i]: list(state_counts.columns.levels[i]) for i in range(len(parents))}
-            )
+            state_names.update({
+                state_counts.columns.names[i]: list(state_counts.columns.levels[i]) for i in range(len(parents))
+            })
 
         cpd = TabularCPD(
             node,

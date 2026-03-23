@@ -165,22 +165,20 @@ class TestBayesianNetworkMethods(unittest.TestCase):
         )
         self.G1.add_cpds(diff_cpd, intel_cpd, grade_cpd)
         self.G2 = DiscreteBayesianNetwork([("d", "g"), ("g", "l"), ("i", "g"), ("i", "l")])
-        self.G3 = DiscreteBayesianNetwork(
-            [
-                ("Pop", "EC"),
-                ("Urb", "EC"),
-                ("GDP", "EC"),
-                ("EC", "FFEC"),
-                ("EC", "REC"),
-                ("EC", "EI"),
-                ("REC", "CO2"),
-                ("REC", "CH4"),
-                ("REC", "N2O"),
-                ("FFEC", "CO2"),
-                ("FFEC", "CH4"),
-                ("FFEC", "N2O"),
-            ]
-        )
+        self.G3 = DiscreteBayesianNetwork([
+            ("Pop", "EC"),
+            ("Urb", "EC"),
+            ("GDP", "EC"),
+            ("EC", "FFEC"),
+            ("EC", "REC"),
+            ("EC", "EI"),
+            ("REC", "CO2"),
+            ("REC", "CH4"),
+            ("REC", "N2O"),
+            ("FFEC", "CO2"),
+            ("FFEC", "CH4"),
+            ("FFEC", "N2O"),
+        ])
 
     def test_moral_graph(self):
         moral_graph = self.G.moralize()
@@ -280,20 +278,18 @@ class TestBayesianNetworkMethods(unittest.TestCase):
         self.assertRaises(TypeError, self.G1.is_imap, fac)
 
     def test_markov_blanket(self):
-        G = DAG(
-            [
-                ("x", "y"),
-                ("z", "y"),
-                ("y", "w"),
-                ("y", "v"),
-                ("u", "w"),
-                ("s", "v"),
-                ("w", "t"),
-                ("w", "m"),
-                ("v", "n"),
-                ("v", "q"),
-            ]
-        )
+        G = DAG([
+            ("x", "y"),
+            ("z", "y"),
+            ("y", "w"),
+            ("y", "v"),
+            ("u", "w"),
+            ("s", "v"),
+            ("w", "t"),
+            ("w", "m"),
+            ("v", "n"),
+            ("v", "q"),
+        ])
         self.assertEqual(set(G.get_markov_blanket("y")), {"s", "w", "x", "u", "z", "v"})
 
     def test_markov_blanket_G3(self):
@@ -790,12 +786,10 @@ class TestBayesianNetworkCPD(unittest.TestCase):
         cpd_l = TabularCPD(
             "l",
             2,
-            values=np.array(
-                [
-                    [0.2, 0.3, 0.4, 0.6, 0.2, 0.3, 0.4, 0.6],
-                    [0.8, 0.7, 0.6, 0.4, 0.8, 0.7, 0.6, 0.4],
-                ]
-            ),
+            values=np.array([
+                [0.2, 0.3, 0.4, 0.6, 0.2, 0.3, 0.4, 0.6],
+                [0.8, 0.7, 0.6, 0.4, 0.8, 0.7, 0.6, 0.4],
+            ]),
             evidence=["g", "d", "i"],
             evidence_card=[2, 2, 2],
         )
@@ -1362,50 +1356,48 @@ class TestBayesianNetworkFitPredict(unittest.TestCase):
         e_prob = self.model_connected.predict_probability(predict_data)
         np_test.assert_allclose(
             e_prob.values.ravel(),
-            np.array(
-                [
-                    0.57894737,
-                    0.42105263,
-                    0.57894737,
-                    0.42105263,
-                    0.57894737,
-                    0.42105263,
-                    0.5,
-                    0.5,
-                    0.57894737,
-                    0.42105263,
-                    0.5,
-                    0.5,
-                    0.57894737,
-                    0.42105263,
-                    0.57894737,
-                    0.42105263,
-                    0.57894737,
-                    0.42105263,
-                    0.5,
-                    0.5,
-                    0.57894737,
-                    0.42105263,
-                    0.57894737,
-                    0.42105263,
-                    0.5,
-                    0.5,
-                    0.57894737,
-                    0.42105263,
-                    0.57894737,
-                    0.42105263,
-                    0.5,
-                    0.5,
-                    0.57894737,
-                    0.42105263,
-                    0.5,
-                    0.5,
-                    0.5,
-                    0.5,
-                    0.5,
-                    0.5,
-                ]
-            ),
+            np.array([
+                0.57894737,
+                0.42105263,
+                0.57894737,
+                0.42105263,
+                0.57894737,
+                0.42105263,
+                0.5,
+                0.5,
+                0.57894737,
+                0.42105263,
+                0.5,
+                0.5,
+                0.57894737,
+                0.42105263,
+                0.57894737,
+                0.42105263,
+                0.57894737,
+                0.42105263,
+                0.5,
+                0.5,
+                0.57894737,
+                0.42105263,
+                0.57894737,
+                0.42105263,
+                0.5,
+                0.5,
+                0.57894737,
+                0.42105263,
+                0.57894737,
+                0.42105263,
+                0.5,
+                0.5,
+                0.57894737,
+                0.42105263,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+            ]),
             atol=0,
         )
         predict_data = pd.DataFrame(

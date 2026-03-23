@@ -109,16 +109,14 @@ class TestDynamicBayesianNetworkMethods(unittest.TestCase):
         )
 
     def test_get_constant_bn(self):
-        self.network.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-                (("D", 1), ("G", 1)),
-                (("I", 1), ("G", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+            (("D", 1), ("G", 1)),
+            (("I", 1), ("G", 1)),
+        ])
         self.network.add_cpds(
             self.grade_cpd,
             self.d_i_cpd,
@@ -185,14 +183,12 @@ class TestDynamicBayesianNetworkMethods(unittest.TestCase):
         )
 
     def test_get_interface_nodes(self):
-        self.network.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+        ])
         self.assertListEqual(sorted(self.network.get_interface_nodes()), [("D", 0), ("I", 0)])
 
         self.assertRaises(ValueError, self.network.get_interface_nodes, -1)
@@ -200,39 +196,33 @@ class TestDynamicBayesianNetworkMethods(unittest.TestCase):
 
     def test_get_interface_nodes_1node2edges_divergent_edges(self):
         # divergent interface edges from one node (a0->a1,b1). issue #1364
-        self.network.add_edges_from(
-            [
-                (("A", 0), ("A", 1)),
-                (("A", 0), ("B", 0)),
-                (("A", 0), ("B", 1)),
-                (("A", 1), ("B", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("A", 0), ("A", 1)),
+            (("A", 0), ("B", 0)),
+            (("A", 0), ("B", 1)),
+            (("A", 1), ("B", 1)),
+        ])
         self.assertListEqual(self.network.get_interface_nodes(0), [("A", 0), ("A", 0)])
         self.assertListEqual(self.network.get_interface_nodes(1), [("A", 1), ("B", 1)])
 
     def test_get_interface_nodes_convergent_edges(self):
         # convergent interface edges to one node(a0,b0->b1). issue #1364
-        self.network.add_edges_from(
-            [
-                (("A", 0), ("B", 1)),
-                (("B", 0), ("B", 1)),
-                (("A", 0), ("B", 0)),
-                (("A", 1), ("B", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("A", 0), ("B", 1)),
+            (("B", 0), ("B", 1)),
+            (("A", 0), ("B", 0)),
+            (("A", 1), ("B", 1)),
+        ])
         self.assertListEqual(self.network.get_interface_nodes(0), [("A", 0), ("B", 0)])
         self.assertListEqual(self.network.get_interface_nodes(1), [("B", 1), ("B", 1)])
 
     def test_get_slice_nodes(self):
-        self.network.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+        ])
         self.assertListEqual(sorted(self.network.get_slice_nodes()), [("D", 0), ("G", 0), ("I", 0)])
         self.assertListEqual(sorted(self.network.get_slice_nodes(1)), [("D", 1), ("G", 1), ("I", 1)])
         self.assertRaises(ValueError, self.network.get_slice_nodes, -1)
@@ -244,14 +234,12 @@ class TestDynamicBayesianNetworkMethods(unittest.TestCase):
         self.assertListEqual(self.network.get_cpds(), [self.grade_cpd])
 
     def test_get_cpds(self):
-        self.network.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+        ])
         self.network.add_cpds(self.grade_cpd, self.d_i_cpd, self.diff_cpd, self.intel_cpd, self.i_i_cpd)
         self.network.initialize_initial_state()
         self.assertEqual(
@@ -275,14 +263,12 @@ class TestDynamicBayesianNetworkMethods(unittest.TestCase):
         self.assertRaises(ValueError, self.network.get_cpds, time_slice="abc")
 
     def test_add_multiple_cpds(self):
-        self.network.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+        ])
         self.network.add_cpds(self.grade_cpd, self.d_i_cpd, self.diff_cpd, self.intel_cpd, self.i_i_cpd)
         self.assertEqual(self.network.get_cpds(("G", 0)).variable, ("G", 0))
         self.assertEqual(self.network.get_cpds(("D", 1)).variable, ("D", 1))
@@ -292,14 +278,12 @@ class TestDynamicBayesianNetworkMethods(unittest.TestCase):
 
     def test_initialize_initial_state(self):
         self.network.add_nodes_from(["D", "G", "I", "S", "L"])
-        self.network.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+        ])
         self.network.add_cpds(self.grade_cpd, self.d_i_cpd, self.diff_cpd, self.intel_cpd, self.i_i_cpd)
         self.network.initialize_initial_state()
         self.assertEqual(len(self.network.cpds), 6)
@@ -321,14 +305,12 @@ class TestDynamicBayesianNetworkMethods(unittest.TestCase):
         )
 
     def test_copy(self):
-        self.network.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+        ])
         cpd = TabularCPD(
             ("G", 0),
             3,
@@ -367,18 +349,16 @@ class TestDynamicBayesianNetworkMethods(unittest.TestCase):
         self.assertNotEqual(sorted(self.network.get_inter_edges()), sorted(copy.get_inter_edges()))
 
     def test_fit(self):
-        model = DBN(
-            [
-                (("A", 0), ("B", 0)),
-                (("A", 0), ("C", 0)),
-                (("B", 0), ("D", 0)),
-                (("C", 0), ("D", 0)),
-                (("A", 0), ("A", 1)),
-                (("B", 0), ("B", 1)),
-                (("C", 0), ("C", 1)),
-                (("D", 0), ("D", 1)),
-            ]
-        )
+        model = DBN([
+            (("A", 0), ("B", 0)),
+            (("A", 0), ("C", 0)),
+            (("B", 0), ("D", 0)),
+            (("C", 0), ("D", 0)),
+            (("A", 0), ("A", 1)),
+            (("B", 0), ("B", 1)),
+            (("C", 0), ("C", 1)),
+            (("D", 0), ("D", 1)),
+        ])
 
         data = np.random.randint(low=0, high=2, size=(10000, 20))
         colnames = []
@@ -431,14 +411,12 @@ class TestDynamicBayesianNetworkMethods(unittest.TestCase):
 class TestDynamicBayesianNetworkMethods2(unittest.TestCase):
     def setUp(self):
         self.G = DBN()
-        self.G.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-            ]
-        )
+        self.G.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+        ])
         """
         G.edges()
         [(('I', 0), ('G', 0)), (('I', 0), ('I', 1)),
@@ -684,14 +662,12 @@ class TestDynamicBayesianNetworkMethods3(unittest.TestCase):
         )
 
     def test_initialize_and_infer1(self):
-        self.cancer_model.add_edges_from(
-            [
-                (("Pollution", 0), ("Cancer", 0)),
-                (("Smoker", 0), ("Cancer", 0)),
-                (("Cancer", 0), ("Xray", 0)),
-                (("Cancer", 0), ("Dyspnoea", 0)),
-            ]
-        )
+        self.cancer_model.add_edges_from([
+            (("Pollution", 0), ("Cancer", 0)),
+            (("Smoker", 0), ("Cancer", 0)),
+            (("Cancer", 0), ("Xray", 0)),
+            (("Cancer", 0), ("Dyspnoea", 0)),
+        ])
 
         self.cancer_model.add_cpds(self.cpd_poll, self.cpd_smoke, self.cpd_cancer, self.cpd_xray, self.cpd_dysp)
         self.cancer_model.initialize_initial_state()
@@ -705,20 +681,18 @@ class TestDynamicBayesianNetworkMethods3(unittest.TestCase):
         self.assertAlmostEqual(self.cancer_query_result[1], 0.7776, 4)
 
     def test_initialize_and_infer2(self):
-        self.cancer_model.add_edges_from(
-            [
-                (("Pollution", 0), ("Cancer", 0)),
-                (("Smoker", 0), ("Cancer", 0)),
-                (("Cancer", 0), ("Xray", 0)),
-                (("Cancer", 0), ("Dyspnoea", 0)),
-                (("Pollution", 0), ("Pollution", 1)),
-                (("Smoker", 0), ("Smoker", 1)),
-                (("Pollution", 1), ("Cancer", 1)),
-                (("Smoker", 1), ("Cancer", 1)),
-                (("Cancer", 1), ("Xray", 1)),
-                (("Cancer", 1), ("Dyspnoea", 1)),
-            ]
-        )
+        self.cancer_model.add_edges_from([
+            (("Pollution", 0), ("Cancer", 0)),
+            (("Smoker", 0), ("Cancer", 0)),
+            (("Cancer", 0), ("Xray", 0)),
+            (("Cancer", 0), ("Dyspnoea", 0)),
+            (("Pollution", 0), ("Pollution", 1)),
+            (("Smoker", 0), ("Smoker", 1)),
+            (("Pollution", 1), ("Cancer", 1)),
+            (("Smoker", 1), ("Cancer", 1)),
+            (("Cancer", 1), ("Xray", 1)),
+            (("Cancer", 1), ("Dyspnoea", 1)),
+        ])
 
         self.cancer_model.add_cpds(
             self.cpd_poll,
@@ -743,20 +717,18 @@ class TestDynamicBayesianNetworkMethods3(unittest.TestCase):
         self.assertAlmostEqual(self.cancer_query_result[1], 0.786693, 4)
 
     def test_initialize_and_infer3(self):
-        self.cancer_model.add_edges_from(
-            [
-                (("Pollution", 0), ("Cancer", 0)),
-                (("Smoker", 0), ("Cancer", 0)),
-                (("Cancer", 0), ("Xray", 0)),
-                (("Cancer", 0), ("Dyspnoea", 0)),
-                (("Pollution", 0), ("Pollution", 1)),
-                (("Smoker", 0), ("Smoker", 1)),
-                (("Pollution", 1), ("Cancer", 1)),
-                (("Smoker", 1), ("Cancer", 1)),
-                (("Cancer", 1), ("Xray", 1)),
-                (("Cancer", 1), ("Dyspnoea", 1)),
-            ]
-        )
+        self.cancer_model.add_edges_from([
+            (("Pollution", 0), ("Cancer", 0)),
+            (("Smoker", 0), ("Cancer", 0)),
+            (("Cancer", 0), ("Xray", 0)),
+            (("Cancer", 0), ("Dyspnoea", 0)),
+            (("Pollution", 0), ("Pollution", 1)),
+            (("Smoker", 0), ("Smoker", 1)),
+            (("Pollution", 1), ("Cancer", 1)),
+            (("Smoker", 1), ("Cancer", 1)),
+            (("Cancer", 1), ("Xray", 1)),
+            (("Cancer", 1), ("Dyspnoea", 1)),
+        ])
 
         self.cancer_model.add_cpds(
             self.cpd_poll,
@@ -791,14 +763,12 @@ class TestDynamicBayesianNetworkMethods3(unittest.TestCase):
 class TestDBNSampling(unittest.TestCase):
     def setUp(self):
         self.dbn = DBN()
-        self.dbn.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-            ]
-        )
+        self.dbn.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+        ])
         diff_cpd = TabularCPD(("D", 0), 2, [[0.6], [0.4]])
         grade_cpd = TabularCPD(
             ("G", 0),
@@ -834,20 +804,18 @@ class TestDBNSampling(unittest.TestCase):
         self.dbn_infer = DBNInference(self.dbn)
 
         # Construct an equivalent simple BN to match values to
-        self.equivalent_bn = DiscreteBayesianNetwork(
-            [
-                ("D0", "G0"),
-                ("I0", "G0"),
-                ("D0", "D1"),
-                ("I0", "I1"),
-                ("D1", "G1"),
-                ("I1", "G1"),
-                ("D1", "D2"),
-                ("I1", "I2"),
-                ("D2", "G2"),
-                ("I2", "G2"),
-            ]
-        )
+        self.equivalent_bn = DiscreteBayesianNetwork([
+            ("D0", "G0"),
+            ("I0", "G0"),
+            ("D0", "D1"),
+            ("I0", "I1"),
+            ("D1", "G1"),
+            ("I1", "G1"),
+            ("D1", "D2"),
+            ("I1", "I2"),
+            ("D2", "G2"),
+            ("I2", "G2"),
+        ])
         d0_cpd = TabularCPD("D0", 2, [[0.6], [0.4]])
         i0_cpd = TabularCPD("I0", 2, [[0.7], [0.3]])
         g0_cpd = TabularCPD(
@@ -2015,14 +1983,12 @@ class TestDBNWithStateName(unittest.TestCase):
         )
 
     def test_get_cpds(self):
-        self.network.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+        ])
         self.network.add_cpds(self.grade_cpd, self.d_i_cpd, self.diff_cpd, self.intel_cpd, self.i_i_cpd)
         self.network.initialize_initial_state()
         self.assertEqual(
@@ -2044,16 +2010,14 @@ class TestDBNWithStateName(unittest.TestCase):
         self.assertEqual(self.network.states, self.state_names)
 
     def test_get_constant_bn(self):
-        self.network.add_edges_from(
-            [
-                (("D", 0), ("G", 0)),
-                (("I", 0), ("G", 0)),
-                (("D", 0), ("D", 1)),
-                (("I", 0), ("I", 1)),
-                (("D", 1), ("G", 1)),
-                (("I", 1), ("G", 1)),
-            ]
-        )
+        self.network.add_edges_from([
+            (("D", 0), ("G", 0)),
+            (("I", 0), ("G", 0)),
+            (("D", 0), ("D", 1)),
+            (("I", 0), ("I", 1)),
+            (("D", 1), ("G", 1)),
+            (("I", 1), ("G", 1)),
+        ])
         self.network.add_cpds(
             self.grade_cpd,
             self.d_i_cpd,

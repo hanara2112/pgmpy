@@ -68,19 +68,17 @@ def data13():
 def data22():
     np.random.seed(0)
     # test data for TAN
-    model = DiscreteBayesianNetwork(
-        [
-            ("A", "R"),
-            ("A", "B"),
-            ("A", "C"),
-            ("A", "D"),
-            ("A", "E"),
-            ("R", "B"),
-            ("R", "C"),
-            ("R", "D"),
-            ("R", "E"),
-        ]
-    )
+    model = DiscreteBayesianNetwork([
+        ("A", "R"),
+        ("A", "B"),
+        ("A", "C"),
+        ("A", "D"),
+        ("A", "E"),
+        ("R", "B"),
+        ("R", "C"),
+        ("R", "D"),
+        ("R", "E"),
+    ])
     cpd_a = TabularCPD("A", 2, [[0.7], [0.3]])
     cpd_r = TabularCPD(
         "R",

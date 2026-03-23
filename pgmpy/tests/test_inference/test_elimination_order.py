@@ -15,9 +15,12 @@ from pgmpy.models import DiscreteBayesianNetwork
 
 class BaseEliminationTest(TestCase):
     def setUp(self):
-        self.model = DiscreteBayesianNetwork(
-            [("diff", "grade"), ("intel", "grade"), ("intel", "sat"), ("grade", "reco")]
-        )
+        self.model = DiscreteBayesianNetwork([
+            ("diff", "grade"),
+            ("intel", "grade"),
+            ("intel", "sat"),
+            ("grade", "reco"),
+        ])
         raw_data = np.random.randint(low=0, high=2, size=(1000, 5))
         data = pd.DataFrame(raw_data, columns=["diff", "grade", "intel", "sat", "reco"])
         self.model.fit(data)

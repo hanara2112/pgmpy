@@ -119,16 +119,14 @@ class TestFactorGraphMethods(unittest.TestCase):
         self.graph = FactorGraph()
 
     def test_get_cardinality(self):
-        self.graph.add_edges_from(
-            [
-                ("a", "phi1"),
-                ("b", "phi1"),
-                ("c", "phi2"),
-                ("d", "phi2"),
-                ("a", "phi3"),
-                ("d", "phi3"),
-            ]
-        )
+        self.graph.add_edges_from([
+            ("a", "phi1"),
+            ("b", "phi1"),
+            ("c", "phi2"),
+            ("d", "phi2"),
+            ("a", "phi3"),
+            ("d", "phi3"),
+        ])
 
         self.assertDictEqual(self.graph.get_cardinality(), {})
 

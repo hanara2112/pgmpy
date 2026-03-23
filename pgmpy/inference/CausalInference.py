@@ -285,13 +285,11 @@ class CausalInference:
 
         possible_adjustment_variables = set(self.observed_variables) - {X} - {Y}
 
-        valid_adjustment_sets = frozenset(
-            [
-                frozenset(s)
-                for s in _powerset(possible_adjustment_variables)
-                if self.is_valid_frontdoor_adjustment_set(X, Y, s)
-            ]
-        )
+        valid_adjustment_sets = frozenset([
+            frozenset(s)
+            for s in _powerset(possible_adjustment_variables)
+            if self.is_valid_frontdoor_adjustment_set(X, Y, s)
+        ])
 
         return valid_adjustment_sets
 

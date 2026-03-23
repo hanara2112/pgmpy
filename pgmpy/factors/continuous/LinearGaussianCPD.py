@@ -34,7 +34,6 @@ class LinearGaussianCPD(BaseFactor):
 
     Parameters
     ----------
-
     variable: any hashable python object
         The variable whose CPD is defined.
 

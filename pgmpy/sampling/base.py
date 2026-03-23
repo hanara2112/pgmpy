@@ -122,9 +122,9 @@ class BayesianModelInference(Inference):
 
         reduce_index = [variable_cpd.variables.index(var) for var in evidence]
 
-        weights_list = compat_fns.stack(
-            [BayesianModelInference._reduce_marg(variable_cpd, reduce_index, sc) for sc in state_combinations]
-        )
+        weights_list = compat_fns.stack([
+            BayesianModelInference._reduce_marg(variable_cpd, reduce_index, sc) for sc in state_combinations
+        ])
         unique_weights, weights_indices = compat_fns.unique(weights_list, axis=0, return_inverse=True)
 
         # convert weights to index; make mapping of state to index

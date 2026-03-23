@@ -64,13 +64,11 @@ class TestJunctionTreeMethods(unittest.TestCase):
         self.graph3.add_factors(self.factor1, self.factor2, self.factor3, self.factor4)
 
         self.graph4 = JunctionTree()
-        self.graph4.add_edges_from(
-            [
-                (("a", "b", "e"), ("b", "c")),
-                (("a", "b", "e"), ("e", "f")),
-                (("d", "e"), ("e", "f")),
-            ]
-        )
+        self.graph4.add_edges_from([
+            (("a", "b", "e"), ("b", "c")),
+            (("a", "b", "e"), ("e", "f")),
+            (("d", "e"), ("e", "f")),
+        ])
         self.graph4.add_factors(self.factor5, self.factor2, self.factor3, self.factor4)
 
     def test_check_model(self):

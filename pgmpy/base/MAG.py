@@ -183,7 +183,6 @@ class MAG(AncestralBase):
         >>> mag.has_inducing_path("X", "Y", mag.latents)
         True
         """
-
         is_inducing = True
         for path in nx.all_simple_paths(self, source=u, target=v):
             if len(path) <= 2:

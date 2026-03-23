@@ -457,13 +457,11 @@ class TestLGBNMethods(unittest.TestCase):
         )
 
         # Wrong column names should raise error
-        data_wrong_names = pd.DataFrame(
-            {
-                "a": np.random.normal(0, 1, 100),
-                "b": np.random.normal(0, 1, 100),
-                "c": np.random.normal(0, 1, 100),
-            }
-        )
+        data_wrong_names = pd.DataFrame({
+            "a": np.random.normal(0, 1, 100),
+            "b": np.random.normal(0, 1, 100),
+            "c": np.random.normal(0, 1, 100),
+        })
         with self.assertRaises(ValueError):
             self.model.log_likelihood(data_wrong_names)
 

@@ -1060,39 +1060,31 @@ class SEM(SEMGraph):
             len(var_names["xi"]),
         )
 
-        B = np.block(
-            [
-                [np.zeros((m, m + n)), params["wedge_y"], np.zeros((m, q))],
-                [np.zeros((n, m + n + p)), params["wedge_x"]],
-                [np.zeros((p, m + n)), params["B"], params["gamma"]],
-                [np.zeros((q, m + n + p + q))],
-            ]
-        )
-        zeta = np.block(
-            [
-                [params["theta_e"], np.zeros((m, n + p + q))],
-                [np.zeros((n, m)), params["theta_del"], np.zeros((n, p + q))],
-                [np.zeros((p, m + n)), params["psi"], np.zeros((p, q))],
-                [np.zeros((q, m + n + p)), params["phi"]],
-            ]
-        )
+        B = np.block([
+            [np.zeros((m, m + n)), params["wedge_y"], np.zeros((m, q))],
+            [np.zeros((n, m + n + p)), params["wedge_x"]],
+            [np.zeros((p, m + n)), params["B"], params["gamma"]],
+            [np.zeros((q, m + n + p + q))],
+        ])
+        zeta = np.block([
+            [params["theta_e"], np.zeros((m, n + p + q))],
+            [np.zeros((n, m)), params["theta_del"], np.zeros((n, p + q))],
+            [np.zeros((p, m + n)), params["psi"], np.zeros((p, q))],
+            [np.zeros((q, m + n + p)), params["phi"]],
+        ])
 
-        B = np.block(
-            [
-                [np.zeros((m, m + n)), fixed_masks["wedge_y"], np.zeros((m, q))],
-                [np.zeros((n, m + n + p)), fixed_masks["wedge_x"]],
-                [np.zeros((p, m + n)), fixed_masks["B"], fixed_masks["gamma"]],
-                [np.zeros((q, m + n + p + q))],
-            ]
-        )
-        zeta = np.block(
-            [
-                [fixed_masks["theta_e"], np.zeros((m, n + p + q))],
-                [np.zeros((n, m)), fixed_masks["theta_del"], np.zeros((n, p + q))],
-                [np.zeros((p, m + n)), fixed_masks["psi"], np.zeros((p, q))],
-                [np.zeros((q, m + n + p)), fixed_masks["phi"]],
-            ]
-        )
+        B = np.block([
+            [np.zeros((m, m + n)), fixed_masks["wedge_y"], np.zeros((m, q))],
+            [np.zeros((n, m + n + p)), fixed_masks["wedge_x"]],
+            [np.zeros((p, m + n)), fixed_masks["B"], fixed_masks["gamma"]],
+            [np.zeros((q, m + n + p + q))],
+        ])
+        zeta = np.block([
+            [fixed_masks["theta_e"], np.zeros((m, n + p + q))],
+            [np.zeros((n, m)), fixed_masks["theta_del"], np.zeros((n, p + q))],
+            [np.zeros((p, m + n)), fixed_masks["psi"], np.zeros((p, q))],
+            [np.zeros((q, m + n + p)), fixed_masks["phi"]],
+        ])
         observed = var_names["y"] + var_names["x"]
 
         return cls.from_RAM(

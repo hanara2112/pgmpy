@@ -126,12 +126,10 @@ class WeightedMinFill(BaseEliminationOrder):
         product of the weights, domain cardinality, of its constituent vertices.
         """
         edges = combinations(self.moralized_model.neighbors(node), 2)
-        return sum(
-            [
-                self.bayesian_model.get_cardinality(edge[0]) * self.bayesian_model.get_cardinality(edge[1])
-                for edge in edges
-            ]
-        )
+        return sum([
+            self.bayesian_model.get_cardinality(edge[0]) * self.bayesian_model.get_cardinality(edge[1])
+            for edge in edges
+        ])
 
 
 class MinNeighbors(BaseEliminationOrder):
@@ -149,9 +147,9 @@ class MinWeight(BaseEliminationOrder):
         The cost of eliminating a node is the product of weights, domain cardinality,
         of its neighbors.
         """
-        return np.prod(
-            [self.bayesian_model.get_cardinality(neig_node) for neig_node in self.moralized_model.neighbors(node)]
-        )
+        return np.prod([
+            self.bayesian_model.get_cardinality(neig_node) for neig_node in self.moralized_model.neighbors(node)
+        ])
 
 
 class MinFill(BaseEliminationOrder):

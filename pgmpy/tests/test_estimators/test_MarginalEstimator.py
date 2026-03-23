@@ -65,12 +65,10 @@ def test_marginal_loss(models):
 
 
 def test_clique_to_marginal():
-    marginals = FactorDict(
-        {
-            variable: FactorDict({variable: DiscreteFactor([variable], cardinality=[1], values=np.ones(1))})
-            for variable in {"A", "B", "C"}
-        }
-    )
+    marginals = FactorDict({
+        variable: FactorDict({variable: DiscreteFactor([variable], cardinality=[1], values=np.ones(1))})
+        for variable in {"A", "B", "C"}
+    })
     clique_to_marginal = MarginalEstimator._clique_to_marginal(
         marginals=marginals,
         clique_nodes=[("A", "B", "C"), ("A",), ("B",), ("C",)],
@@ -83,12 +81,10 @@ def test_clique_to_marginal():
 
 
 def test_clique_to_marginal_no_matching_cliques():
-    marginals = FactorDict(
-        {
-            variable: FactorDict({variable: DiscreteFactor([variable], cardinality=[1], values=np.ones(1))})
-            for variable in {"A", "B", "C"}
-        }
-    )
+    marginals = FactorDict({
+        variable: FactorDict({variable: DiscreteFactor([variable], cardinality=[1], values=np.ones(1))})
+        for variable in {"A", "B", "C"}
+    })
     with pytest.raises(ValueError):
         MarginalEstimator._clique_to_marginal(marginals, [("D",)])
 
@@ -117,12 +113,10 @@ def test_torch_marginal_loss(torch_models):
 
 @requires_torch
 def test_torch_clique_to_marginal():
-    marginals = FactorDict(
-        {
-            variable: FactorDict({variable: DiscreteFactor([variable], cardinality=[1], values=np.ones(1))})
-            for variable in {"A", "B", "C"}
-        }
-    )
+    marginals = FactorDict({
+        variable: FactorDict({variable: DiscreteFactor([variable], cardinality=[1], values=np.ones(1))})
+        for variable in {"A", "B", "C"}
+    })
     clique_to_marginal = MarginalEstimator._clique_to_marginal(
         marginals=marginals,
         clique_nodes=[("A", "B", "C"), ("A",), ("B",), ("C",)],
@@ -136,11 +130,9 @@ def test_torch_clique_to_marginal():
 
 @requires_torch
 def test_torch_clique_to_marginal_no_matching_cliques():
-    marginals = FactorDict(
-        {
-            variable: FactorDict({variable: DiscreteFactor([variable], cardinality=[1], values=np.ones(1))})
-            for variable in {"A", "B", "C"}
-        }
-    )
+    marginals = FactorDict({
+        variable: FactorDict({variable: DiscreteFactor([variable], cardinality=[1], values=np.ones(1))})
+        for variable in {"A", "B", "C"}
+    })
     with pytest.raises(ValueError):
         MarginalEstimator._clique_to_marginal(marginals, [("D",)])

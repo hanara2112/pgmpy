@@ -1935,34 +1935,26 @@ class TestCoreGraph:
         graph.add_edge("B", "C", "o-")
         graph.add_edge("A", "B", "<>")
 
-        assert sorted(graph.get_edges(keys=False, data=False)) == sorted(
-            [
-                ("A", "B"),
-                ("A", "B"),
-                ("B", "C"),
-            ]
-        )
-        assert sorted(graph.get_edges(keys=True, data=False)) == sorted(
-            [
-                ("A", "B", 0),
-                ("A", "B", 1),
-                ("B", "C", 0),
-            ]
-        )
-        assert sorted(graph.get_edges(keys=False, data=True)) == sorted(
-            [
-                ("A", "B", "->"),
-                ("A", "B", "<>"),
-                ("B", "C", "o-"),
-            ]
-        )
-        assert sorted(graph.get_edges(keys=True, data=True)) == sorted(
-            [
-                ("A", "B", 0, "->"),
-                ("A", "B", 1, "<>"),
-                ("B", "C", 0, "o-"),
-            ]
-        )
+        assert sorted(graph.get_edges(keys=False, data=False)) == sorted([
+            ("A", "B"),
+            ("A", "B"),
+            ("B", "C"),
+        ])
+        assert sorted(graph.get_edges(keys=True, data=False)) == sorted([
+            ("A", "B", 0),
+            ("A", "B", 1),
+            ("B", "C", 0),
+        ])
+        assert sorted(graph.get_edges(keys=False, data=True)) == sorted([
+            ("A", "B", "->"),
+            ("A", "B", "<>"),
+            ("B", "C", "o-"),
+        ])
+        assert sorted(graph.get_edges(keys=True, data=True)) == sorted([
+            ("A", "B", 0, "->"),
+            ("A", "B", 1, "<>"),
+            ("B", "C", 0, "o-"),
+        ])
 
     def test_get_edge_type(self):
         graph = _CoreGraph()

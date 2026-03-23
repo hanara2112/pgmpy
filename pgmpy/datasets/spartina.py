@@ -3,8 +3,8 @@ from pgmpy.datasets._base import _BaseDataset, _CovarianceMixin
 
 class Spartina(_CovarianceMixin, _BaseDataset):
     """
-        References
-        ----------
+    References
+    ----------
         .. [1] Spirtes, P., Glymour, C. N., Scheines, R., & Heckerman, D. (2000). Causation,
     prediction, and search. MIT press, p. 18.
     """

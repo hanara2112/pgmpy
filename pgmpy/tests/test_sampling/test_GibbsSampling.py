@@ -51,14 +51,12 @@ def bayesian_model_sprinkler():
         evidence_card=[2, 2],
     )
     model = DiscreteBayesianNetwork()
-    model.add_edges_from(
-        [
-            ("Cloudy", "Sprinkler"),
-            ("Cloudy", "Rain"),
-            ("Sprinkler", "Wet_Grass"),
-            ("Rain", "Wet_Grass"),
-        ]
-    )
+    model.add_edges_from([
+        ("Cloudy", "Sprinkler"),
+        ("Cloudy", "Rain"),
+        ("Sprinkler", "Wet_Grass"),
+        ("Rain", "Wet_Grass"),
+    ])
     model.add_cpds(cpt_cloudy, cpt_sprinkler, cpt_rain, cpt_wet_grass)
     return model
 

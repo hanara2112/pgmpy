@@ -74,18 +74,16 @@ class TestUndirectedGraphCreation(unittest.TestCase):
 
 class TestUndirectedGraphMethods(unittest.TestCase):
     def test_is_clique(self):
-        G = UndirectedGraph(
-            [
-                ("A", "B"),
-                ("C", "B"),
-                ("B", "D"),
-                ("B", "E"),
-                ("D", "E"),
-                ("E", "F"),
-                ("D", "F"),
-                ("B", "F"),
-            ]
-        )
+        G = UndirectedGraph([
+            ("A", "B"),
+            ("C", "B"),
+            ("B", "D"),
+            ("B", "E"),
+            ("D", "E"),
+            ("E", "F"),
+            ("D", "F"),
+            ("B", "F"),
+        ])
         self.assertFalse(G.is_clique(nodes=["A", "B", "C", "D"]))
         self.assertTrue(G.is_clique(nodes=["B", "D", "E", "F"]))
         self.assertTrue(G.is_clique(nodes=["D", "E", "B"]))

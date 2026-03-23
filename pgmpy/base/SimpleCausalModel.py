@@ -69,7 +69,6 @@ class SimpleCausalModel(DAG):
 
     Examples
     --------
-
     >>> from pgmpy.base import SimpleCausalModel
     >>> model = SimpleCausalModel(
     ...     exposures="X", outcomes="Y", confounders="Z", mediators="M", instruments="I"

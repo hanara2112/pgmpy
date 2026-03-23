@@ -332,14 +332,12 @@ class TestSnowNetworkTorch(unittest.TestCase):
     def setUp(self):
         config.set_backend("torch")
 
-        self.model = DiscreteBayesianNetwork(
-            [
-                ("Snow", "Risk"),
-                ("Snow", "Traffic"),
-                ("Traffic", "Late"),
-                ("Risk", "Late"),
-            ]
-        )
+        self.model = DiscreteBayesianNetwork([
+            ("Snow", "Risk"),
+            ("Snow", "Traffic"),
+            ("Traffic", "Late"),
+            ("Risk", "Late"),
+        ])
 
         cpd_snow = TabularCPD("Snow", 2, [[0.4], [0.6]], state_names={"Snow": ["yes", "no"]})
         cpd_risk = TabularCPD(
@@ -569,17 +567,15 @@ class TestVariableEliminationMarkov(unittest.TestCase):
 
         # It is just a moralised version of the above Bayesian network so all the results are same. Only factors
         # are under consideration for inference so this should be fine.
-        self.markov_model = DiscreteMarkovNetwork(
-            [
-                ("A", "J"),
-                ("R", "J"),
-                ("J", "Q"),
-                ("J", "L"),
-                ("G", "L"),
-                ("A", "R"),
-                ("J", "G"),
-            ]
-        )
+        self.markov_model = DiscreteMarkovNetwork([
+            ("A", "J"),
+            ("R", "J"),
+            ("J", "Q"),
+            ("J", "L"),
+            ("G", "L"),
+            ("A", "R"),
+            ("J", "G"),
+        ])
 
         factor_a = TabularCPD("A", 2, values=[[0.2], [0.8]]).to_factor()
         factor_r = TabularCPD("R", 2, values=[[0.4], [0.6]]).to_factor()

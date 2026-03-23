@@ -202,13 +202,11 @@ class MirrorDescentEstimator(MarginalEstimator):
 
             if isinstance(pbar, tqdm):
                 pbar.set_description_str(
-                    ",\t".join(
-                        [
-                            f"Loss: {curr_loss:e}",
-                            f"Grad Norm: {np.sqrt(dL.dot(dL)):e}",
-                            f"alpha: {alpha:e}",
-                        ]
-                    )
+                    ",\t".join([
+                        f"Loss: {curr_loss:e}",
+                        f"Grad Norm: {np.sqrt(dL.dot(dL)):e}",
+                        f"alpha: {alpha:e}",
+                    ])
                 )
 
             for __ in range(25):

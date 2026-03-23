@@ -16,37 +16,33 @@ def mmhc_estimator():
 def test_estimate(mmhc_estimator):
     dag1 = mmhc_estimator.estimate()
     assert len(dag1.edges()) > 1
-    assert set(dag1.edges()).issubset(
-        {
-            ("X", "sum"),
-            ("Y", "sum"),
-            ("Z", "sum"),
-            ("sum", "X"),
-            ("sum", "Y"),
-            ("sum", "Z"),
-            ("X", "Y"),
-            ("X", "Z"),
-            ("Y", "Z"),
-            ("Y", "X"),
-            ("Z", "X"),
-            ("Z", "Y"),
-        }
-    )
+    assert set(dag1.edges()).issubset({
+        ("X", "sum"),
+        ("Y", "sum"),
+        ("Z", "sum"),
+        ("sum", "X"),
+        ("sum", "Y"),
+        ("sum", "Z"),
+        ("X", "Y"),
+        ("X", "Z"),
+        ("Y", "Z"),
+        ("Y", "X"),
+        ("Z", "X"),
+        ("Z", "Y"),
+    })
     dag2 = mmhc_estimator.estimate(significance_level=0.001)
     assert len(dag2.edges()) > 1
-    assert set(dag2.edges()).issubset(
-        {
-            ("X", "sum"),
-            ("Y", "sum"),
-            ("Z", "sum"),
-            ("sum", "X"),
-            ("sum", "Y"),
-            ("sum", "Z"),
-            ("X", "Y"),
-            ("X", "Z"),
-            ("Y", "Z"),
-            ("Y", "X"),
-            ("Z", "X"),
-            ("Z", "Y"),
-        }
-    )
+    assert set(dag2.edges()).issubset({
+        ("X", "sum"),
+        ("Y", "sum"),
+        ("Z", "sum"),
+        ("sum", "X"),
+        ("sum", "Y"),
+        ("sum", "Z"),
+        ("X", "Y"),
+        ("X", "Z"),
+        ("Y", "Z"),
+        ("Y", "X"),
+        ("Z", "X"),
+        ("Z", "Y"),
+    })

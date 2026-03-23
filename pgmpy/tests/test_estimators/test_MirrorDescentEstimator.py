@@ -111,13 +111,11 @@ def test_multi_clique_tree(backend):
         }
     )
     model = JunctionTree()
-    model.add_edges_from(
-        [
-            (("a", "b"), ("b", "c")),
-            (("b", "c"), ("c", "d")),
-            (("b", "c"), ("c", "e")),
-        ]
-    )
+    model.add_edges_from([
+        (("a", "b"), ("b", "c")),
+        (("b", "c"), ("c", "d")),
+        (("b", "c"), ("c", "e")),
+    ])
     assert len(model.nodes) > 1
     for node in model.nodes():
         model.add_factors(

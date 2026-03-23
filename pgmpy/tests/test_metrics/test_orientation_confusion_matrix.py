@@ -8,33 +8,29 @@ from pgmpy.metrics import OrientationConfusionMatrix
 # The models in true_dag and est_dag fixtures are taken from the paper: https://arxiv.org/pdf/2412.10039
 @pytest.fixture
 def true_dag():
-    return DAG(
-        [
-            ("x1", "x2"),
-            ("x1", "x4"),
-            ("x1", "x5"),
-            ("x2", "x5"),
-            ("x2", "x3"),
-            ("x2", "x4"),
-            ("x4", "x5"),
-            ("x5", "x3"),
-        ]
-    )
+    return DAG([
+        ("x1", "x2"),
+        ("x1", "x4"),
+        ("x1", "x5"),
+        ("x2", "x5"),
+        ("x2", "x3"),
+        ("x2", "x4"),
+        ("x4", "x5"),
+        ("x5", "x3"),
+    ])
 
 
 @pytest.fixture
 def est_dag():
-    return DAG(
-        [
-            ("x1", "x2"),
-            ("x1", "x3"),
-            ("x1", "x4"),
-            ("x1", "x5"),
-            ("x3", "x2"),
-            ("x4", "x2"),
-            ("x5", "x3"),
-        ]
-    )
+    return DAG([
+        ("x1", "x2"),
+        ("x1", "x3"),
+        ("x1", "x4"),
+        ("x1", "x5"),
+        ("x3", "x2"),
+        ("x4", "x2"),
+        ("x5", "x3"),
+    ])
 
 
 @pytest.fixture

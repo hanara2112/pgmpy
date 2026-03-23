@@ -254,16 +254,14 @@ class TestResidualMethods(unittest.TestCase):
         # Create a combination of mixed data types
         np.random.seed(42)
 
-        self.model_indep = LinearGaussianBayesianNetwork(
-            [
-                ("Z1", "X"),
-                ("Z2", "X"),
-                ("Z3", "X"),
-                ("Z1", "Y"),
-                ("Z2", "Y"),
-                ("Z3", "Y"),
-            ]
-        )
+        self.model_indep = LinearGaussianBayesianNetwork([
+            ("Z1", "X"),
+            ("Z2", "X"),
+            ("Z3", "X"),
+            ("Z1", "Y"),
+            ("Z2", "Y"),
+            ("Z3", "Y"),
+        ])
         self.cpd_z1 = LinearGaussianCPD("Z1", [0], 1)
         self.cpd_z2 = LinearGaussianCPD("Z2", [0], 1)
         self.cpd_z3 = LinearGaussianCPD("Z3", [0], 1)
@@ -305,17 +303,15 @@ class TestResidualMethods(unittest.TestCase):
         self.df_indep_ord_cont = self.df_indep_cont_cont.copy()
         self.df_indep_ord_cont.X = pd.cut(self.df_indep_ord_cont.X, bins=4)
 
-        self.model_dep = LinearGaussianBayesianNetwork(
-            [
-                ("Z1", "X"),
-                ("Z2", "X"),
-                ("Z3", "X"),
-                ("Z1", "Y"),
-                ("Z2", "Y"),
-                ("Z3", "Y"),
-                ("X", "Y"),
-            ]
-        )
+        self.model_dep = LinearGaussianBayesianNetwork([
+            ("Z1", "X"),
+            ("Z2", "X"),
+            ("Z3", "X"),
+            ("Z1", "Y"),
+            ("Z2", "Y"),
+            ("Z3", "Y"),
+            ("X", "Y"),
+        ])
         self.cpd_y_dep = LinearGaussianCPD("Y", [0, 0.5, 0.5, 0.5, 0.5], 1, ["Z1", "Z2", "Z3", "X"])
         self.model_dep.add_cpds(self.cpd_z1, self.cpd_z2, self.cpd_z3, self.cpd_x, self.cpd_y_dep)
         self.df_dep = self.model_dep.simulate(n_samples=1000, seed=42)
@@ -379,15 +375,13 @@ class TestResidualMethods(unittest.TestCase):
 
         computed_coefs = []
         computed_pvalues = []
-        for i, df_indep in enumerate(
-            [
-                self.df_indep,
-                self.df_indep_cont_cont,
-                self.df_indep_cat_cont,
-                self.df_indep_cat_cat,
-                self.df_indep_ord_cont,
-            ]
-        ):
+        for i, df_indep in enumerate([
+            self.df_indep,
+            self.df_indep_cont_cont,
+            self.df_indep_cat_cont,
+            self.df_indep_cat_cat,
+            self.df_indep_ord_cont,
+        ]):
             coef, p_value = pillai_trace(
                 X="X",
                 Y="Y",
@@ -418,15 +412,13 @@ class TestResidualMethods(unittest.TestCase):
 
         computed_coefs = []
         computed_pvalues = []
-        for i, df_indep in enumerate(
-            [
-                self.df_indep,
-                self.df_indep_cont_cont,
-                self.df_indep_cat_cont,
-                self.df_indep_cat_cat,
-                self.df_indep_ord_cont,
-            ]
-        ):
+        for i, df_indep in enumerate([
+            self.df_indep,
+            self.df_indep_cont_cont,
+            self.df_indep_cat_cont,
+            self.df_indep_cat_cat,
+            self.df_indep_ord_cont,
+        ]):
             coef, p_value = pillai_trace(
                 X="X",
                 Y="Y",
@@ -457,15 +449,13 @@ class TestResidualMethods(unittest.TestCase):
 
         computed_coefs = []
         computed_pvalues = []
-        for i, df_dep in enumerate(
-            [
-                self.df_dep,
-                self.df_dep_cont_cont,
-                self.df_dep_cat_cont,
-                self.df_dep_cat_cat,
-                self.df_dep_ord_cont,
-            ]
-        ):
+        for i, df_dep in enumerate([
+            self.df_dep,
+            self.df_dep_cont_cont,
+            self.df_dep_cat_cont,
+            self.df_dep_cat_cat,
+            self.df_dep_ord_cont,
+        ]):
             coef, p_value = pillai_trace(
                 X="X",
                 Y="Y",

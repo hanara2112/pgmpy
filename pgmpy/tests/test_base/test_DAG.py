@@ -220,18 +220,16 @@ class TestDAGCreation(unittest.TestCase):
         self.assertEqual(pdag.latents, set())
 
     def test_to_pdag_multiple_edges_1(self):
-        dag = DAG(
-            [
-                ("Z1", "X"),
-                ("Z1", "Z3"),
-                ("Z2", "Z3"),
-                ("Z2", "Y"),
-                ("Z3", "X"),
-                ("Z3", "Y"),
-                ("X", "W"),
-                ("W", "Y"),
-            ]
-        )
+        dag = DAG([
+            ("Z1", "X"),
+            ("Z1", "Z3"),
+            ("Z2", "Z3"),
+            ("Z2", "Y"),
+            ("Z3", "X"),
+            ("Z3", "Y"),
+            ("X", "W"),
+            ("W", "Y"),
+        ])
         pdag = dag.to_pdag()
 
         # Expected edges in the PDAG
@@ -543,17 +541,15 @@ class TestDAGCreation(unittest.TestCase):
         n_samples = 100
 
         # Generate data with some controlled relationships
-        data = pd.DataFrame(
-            {
-                "W": np.random.normal(0, 1, n_samples),
-                "L": np.random.normal(0, 1, n_samples),
-                "X": np.random.normal(0, 1, n_samples) + 0.5 * np.random.normal(0, 1, n_samples),  # X depends on L
-                "Z": np.random.normal(0, 1, n_samples) + 0.3 * np.random.normal(0, 1, n_samples),  # Z depends on W
-                "Y": np.random.normal(0, 1, n_samples)
-                + 0.4 * np.random.normal(0, 1, n_samples)
-                + 0.3 * np.random.normal(0, 1, n_samples),  # Y depends on X and Z
-            }
-        )
+        data = pd.DataFrame({
+            "W": np.random.normal(0, 1, n_samples),
+            "L": np.random.normal(0, 1, n_samples),
+            "X": np.random.normal(0, 1, n_samples) + 0.5 * np.random.normal(0, 1, n_samples),  # X depends on L
+            "Z": np.random.normal(0, 1, n_samples) + 0.3 * np.random.normal(0, 1, n_samples),  # Z depends on W
+            "Y": np.random.normal(0, 1, n_samples)
+            + 0.4 * np.random.normal(0, 1, n_samples)
+            + 0.3 * np.random.normal(0, 1, n_samples),  # Y depends on X and Z
+        })
 
         # Compute strengths for all edges
         strengths = dag.edge_strength(data)
@@ -1109,17 +1105,15 @@ class TestDAGConversion(unittest.TestCase):
 
     def test_complex_multi_parent_structure(self):
         """Test with nodes having multiple parents"""
-        dag = DAG(
-            [
-                ("A", "E"),
-                ("B", "E"),
-                ("C", "E"),
-                ("D", "E"),  # E has 4 parents
-                ("E", "F"),
-                ("E", "G"),  # E has 2 children
-                ("X", "Y"),  # Separate component
-            ]
-        )
+        dag = DAG([
+            ("A", "E"),
+            ("B", "E"),
+            ("C", "E"),
+            ("D", "E"),  # E has 4 parents
+            ("E", "F"),
+            ("E", "G"),  # E has 2 children
+            ("X", "Y"),  # Separate component
+        ])
 
         lavaan_result = dag.to_lavaan()
         self.assertIn("E ~ A + B + C + D", lavaan_result)
