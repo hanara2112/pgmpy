@@ -39,39 +39,34 @@ class TestKCI(unittest.TestCase):
         Y_mul = Z1 - Z2 + rng.normal(loc=0, scale=0.3, size=300)
         self.df_cind_mul = pd.DataFrame({"X": X_mul, "Y": Y_mul, "Z1": Z1, "Z2": Z2})
 
-    def test_unconditional_independent(self):
+    def test_unconditional(self):
+        # Independent X, Y -> should be independent
         test = KCI(data=self.df_ind)
-        result = test("X", "Y", [], significance_level=0.05)
-        self.assertTrue(result)
-        self.assertTrue(test.p_value_ > 0.05)
+        self.assertTrue(test("X", "Y", [], significance_level=0.05))
+        self.assertGreater(test.p_value_, 0.05)
 
-    def test_unconditional_dependent(self):
+        # Linear dependence X -> Y -> should be dependent
         test = KCI(data=self.df_dep)
-        result = test("X", "Y", [], significance_level=0.05)
-        self.assertFalse(result)
-        self.assertTrue(test.p_value_ < 0.05)
+        self.assertFalse(test("X", "Y", [], significance_level=0.05))
+        self.assertLess(test.p_value_, 0.05)
 
-    def test_nonlinear_dependency(self):
-        # KCI should detect non-linear dependence (Y = X^2 + noise)
+        # Non-linear dependence Y = X^2 + noise -> should be dependent
         test = KCI(data=self.df_nonlinear)
-        result = test("X", "Y", [], significance_level=0.05)
-        self.assertFalse(result)
-        self.assertTrue(test.p_value_ < 0.05)
+        self.assertFalse(test("X", "Y", [], significance_level=0.05))
+        self.assertLess(test.p_value_, 0.05)
 
-    def test_conditional_independent(self):
+    def test_conditional(self):
+        # X <- Z -> Y: independent given Z (single conditioning variable)
         test = KCI(data=self.df_cind)
-        result = test("X", "Y", ["Z"], significance_level=0.05)
-        self.assertTrue(result)
-        self.assertTrue(test.p_value_ > 0.05)
+        self.assertTrue(test("X", "Y", ["Z"], significance_level=0.05))
+        self.assertGreater(test.p_value_, 0.05)
 
-    def test_conditional_independent_multiple_z(self):
+        # X <- (Z1,Z2) -> Y: independent given multiple Z
         test = KCI(data=self.df_cind_mul)
-        result = test("X", "Y", ["Z1", "Z2"], significance_level=0.05)
-        self.assertTrue(result)
-        self.assertTrue(test.p_value_ > 0.05)
+        self.assertTrue(test("X", "Y", ["Z1", "Z2"], significance_level=0.05))
+        self.assertGreater(test.p_value_, 0.05)
 
-    def test_conditional_dependent(self):
-        # X and Y are marginally independent but dependent given Z (v-structure)
+        # V-structure X -> Z <- Y: dependent given Z
         rng = np.random.default_rng(seed=42)
         X = rng.normal(size=300)
         Y = rng.normal(size=300)
@@ -79,22 +74,26 @@ class TestKCI(unittest.TestCase):
         df_vstruct = pd.DataFrame({"X": X, "Y": Y, "Z": Z})
 
         test = KCI(data=df_vstruct)
-        result = test("X", "Y", ["Z"], significance_level=0.05)
-        self.assertFalse(result)
-        self.assertTrue(test.p_value_ < 0.05)
+        self.assertFalse(test("X", "Y", ["Z"], significance_level=0.05))
+        self.assertLess(test.p_value_, 0.05)
 
-    def test_statistic_and_pvalue_set(self):
+    def test_api_and_attributes(self):
         test = KCI(data=self.df_ind)
         test("X", "Y", [], significance_level=0.05)
-        self.assertTrue(hasattr(test, "statistic_"))
-        self.assertTrue(hasattr(test, "p_value_"))
+
+        # statistic_ and p_value_ are set as floats
         self.assertIsInstance(test.statistic_, float)
         self.assertIsInstance(test.p_value_, float)
 
-    def test_is_independent_method(self):
-        test = KCI(data=self.df_ind)
+        # is_independent() returns a boolean value
         result = test.is_independent("X", "Y", [], significance_level=0.05)
         self.assertIn(result, (True, False))
+
+        # get_ci_test factory lookup
+        from pgmpy.ci_tests import get_ci_test
+
+        test = get_ci_test(test="kci", data=self.df_ind)
+        self.assertIsInstance(test, KCI)
 
     def test_invalid_inputs(self):
         test = KCI(data=self.df_ind)
@@ -102,9 +101,3 @@ class TestKCI(unittest.TestCase):
             test("X", "X", [], significance_level=0.05)
         with self.assertRaises(ValueError):
             test("X", "Y", "Z", significance_level=0.05)
-
-    def test_get_ci_test_by_name(self):
-        from pgmpy.ci_tests import get_ci_test
-
-        test = get_ci_test(test="kci", data=self.df_ind)
-        self.assertIsInstance(test, KCI)
