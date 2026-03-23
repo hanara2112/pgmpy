@@ -4,6 +4,7 @@ from .fisher_z import FisherZ
 from .g_sq import GSq
 from .gcm import GCM
 from .independence_match import IndependenceMatch
+from .kci import KCI
 from .log_likelihood import LogLikelihood
 from .modified_log_likelihood import ModifiedLogLikelihood
 from .pearsonr import Pearsonr
@@ -19,6 +20,7 @@ __all__ = [
     "GSq",
     "GCM",
     "IndependenceMatch",
+    "KCI",
     "LogLikelihood",
     "ModifiedLogLikelihood",
     "Pearsonr",
