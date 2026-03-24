@@ -47,15 +47,16 @@ class PillaiTrace(_BaseCITest):
     data : pandas.DataFrame
         The dataset in which to test the independence condition.
 
-    seed : int, optional
-        Random seed used for the underlying XGBoost models. Only used when
-        ``estimator`` is ``None``.
-
     estimator : estimator instance, optional
-        Any estimator with `fit`, `predict`, and `predict_proba` (if testing
-        discrete variables) methods. If ``None`` (default), uses XGBoost
-        (``XGBClassifier`` for categorical targets, ``XGBRegressor`` for
-        continuous).
+        Any sklearn-compatible estimator with ``fit``, ``predict``, and ``predict_proba``
+        (if testing discrete variables) methods. If ``None`` (default), uses XGBoost
+        (``XGBClassifier`` for categorical targets, ``XGBRegressor`` for continuous).
+        Categorical Z columns are one-hot encoded when a custom estimator is used, since
+        most sklearn estimators do not handle them natively.
+
+    seed : int, optional
+        Random seed for the default XGBoost estimator. Ignored when a custom
+        ``estimator`` is provided.
 
     Attributes
     ----------
@@ -83,20 +84,21 @@ class PillaiTrace(_BaseCITest):
     }
 
     def __init__(self, data: pd.DataFrame, estimator=None, seed=None):
-        self.seed = seed
-        self.estimator = estimator
         self.data = data
+        self.estimator = estimator
+        self.seed = seed
         super().__init__()
 
-    def _fit_predict(self, data, target_col, Z_data, enable_categorical):
-        is_cat = data.loc[:, target_col].dtype == "category"
-        target_data = data.loc[:, target_col]
+    def _fit_predict(self, target_col, Z_data, xgboost=None):
+        """Fit an estimator on Z_data to predict target_col, return predictions and category index."""
+        is_cat = self.data.loc[:, target_col].dtype == "category"
+        target_data = self.data.loc[:, target_col]
         cat_index = None
 
         if self.estimator is not None:
             model = clone(self.estimator)
         else:
-            xgboost = _safe_import("xgboost")
+            enable_categorical = any(Z_data.dtypes == "category")
             model_cls = xgboost.XGBClassifier if is_cat else xgboost.XGBRegressor
             model = model_cls(
                 enable_categorical=enable_categorical,
@@ -119,29 +121,6 @@ class PillaiTrace(_BaseCITest):
 
         return pred, cat_index
 
-    def _get_predictions(self, X, Y, Z, data):
-        """
-        Get predictions for X and Y given Z.
-
-        Uses the user-provided ``self.estimator`` if set, otherwise falls
-        back to XGBoost. Uses ``self.seed`` for reproducibility when using
-        XGBoost.
-        """
-        # Sklearn estimators do not natively handle pandas categories, so one-hot encode Z
-        if self.estimator is not None:
-            # Explicitly select only category/object columns to dummy encode, leaving continuous variables untouched.
-            cat_cols = data.loc[:, Z].select_dtypes(include=["category", "object"]).columns
-            Z_data = pd.get_dummies(data.loc[:, Z], columns=cat_cols)
-            enable_categorical = False
-        else:
-            Z_data = data.loc[:, Z]
-            enable_categorical = any(Z_data.dtypes == "category")
-
-        pred_x, x_cat_index = self._fit_predict(data, X, Z_data, enable_categorical)
-        pred_y, y_cat_index = self._fit_predict(data, Y, Z_data, enable_categorical)
-
-        return pred_x, pred_y, x_cat_index, y_cat_index
-
     def run_test(
         self,
         X: str,
@@ -152,20 +131,46 @@ class PillaiTrace(_BaseCITest):
         Compute Pillai's trace statistic and p-value.
 
         Sets ``self.statistic_`` (Pillai's trace) and ``self.p_value_``.
+
+        Parameters
+        ----------
+        X : str
+            The first variable for testing X _|_ Y | Z.
+        Y : str
+            The second variable for testing X _|_ Y | Z.
+        Z : list
+            Conditioning variables.
+
+        Returns
+        -------
+        statistic : float
+            The Pillai's trace statistic.
+        p_value : float
+            The p-value.
         """
         data = self.data
-        # Step 1: Add an intercept term for conditional variables.
+
+        # Step 1: Add an intercept column so the estimator always has at least one feature.
         Z = Z + ["_intercept_Z"]
         data = data.assign(_intercept_Z=np.ones(data.shape[0]))
 
-        # Step 2: Get the predictions
-        pred_x, pred_y, x_cat_index, y_cat_index = self._get_predictions(X, Y, Z, data)
+        # Step 2: Prepare Z data. Custom sklearn estimators need one-hot encoded Z;
+        # XGBoost handles categorical columns natively.
+        xgboost = None
+        if self.estimator is not None:
+            Z_data = pd.get_dummies(data.loc[:, Z])
+        else:
+            xgboost = _safe_import("xgboost")
+            Z_data = data.loc[:, Z]
 
-        # Step 3: Compute the residuals
+        # Step 3: Get predictions for X and Y given Z.
+        pred_x, x_cat_index = self._fit_predict(X, Z_data, xgboost)
+        pred_y, y_cat_index = self._fit_predict(Y, Z_data, xgboost)
+
+        # Step 4: Compute the residuals.
         def get_residuals(col_name, pred, cat_index):
             if data.loc[:, col_name].dtype == "category":
                 dummies = pd.get_dummies(data.loc[:, col_name]).loc[:, cat_index.categories[cat_index.codes]]
-                # Drop last column to avoid multicollinearity
                 return (dummies - pred).iloc[:, :-1]
             else:
                 return data.loc[:, col_name] - pred
@@ -173,22 +178,23 @@ class PillaiTrace(_BaseCITest):
         res_x = get_residuals(X, pred_x, x_cat_index)
         res_y = get_residuals(Y, pred_y, y_cat_index)
 
-        # Step 4: Compute Pillai's trace.
         if isinstance(res_x, pd.Series):
             res_x = res_x.to_frame()
         if isinstance(res_y, pd.Series):
             res_y = res_y.to_frame()
 
-        cca = CCA(scale=False, n_components=min(res_x.shape[1], res_y.shape[1]))
+        # Step 5: Compute Pillai's trace via CCA.
+        n_components = min(res_x.shape[1], res_y.shape[1])
+        cca = CCA(scale=False, n_components=n_components)
         res_x_c, res_y_c = cca.fit_transform(res_x, res_y)
 
         cancor = []
-        for i in range(min(res_x.shape[1], res_y.shape[1])):
+        for i in range(n_components):
             cancor.append(np.corrcoef(res_x_c[:, [i]].T, res_y_c[:, [i]].T)[0, 1])
 
         coef = (np.array(cancor) ** 2).sum()
 
-        # Step 5: Compute p-value using f-approximation.
+        # Step 6: Compute p-value using F-approximation.
         s = min(res_x.shape[1], res_y.shape[1])
         df1 = res_x.shape[1] * res_y.shape[1]
         df2 = s * (data.shape[0] - 1 + s - res_x.shape[1] - res_y.shape[1])
