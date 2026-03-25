@@ -70,3 +70,69 @@ class TestKCI(unittest.TestCase):
     def test_get_ci_test_factory(self):
         test = get_ci_test(test="kci", data=self.df_ind)
         self.assertIsInstance(test, KCI)
+
+
+@unittest.skipUnless(
+    __import__("importlib").util.find_spec("causallearn"),
+    "causallearn not installed",
+)
+class TestKCICompareCausalLearn(unittest.TestCase):
+    """Compare pgmpy KCI results against causal-learn's implementation."""
+
+    def test_unconditional(self):
+        from causallearn.utils.cit import CIT
+
+        rng = np.random.default_rng(seed=10)
+        data_np = rng.standard_normal((300, 2))
+        df = pd.DataFrame(data_np, columns=["X", "Y"])
+
+        # Independent: both should agree (p > 0.05)
+        test = KCI(data=df)
+        test.run_test("X", "Y", [])
+        cl_p = CIT(data_np, "kci")(0, 1)
+        self.assertGreater(test.p_value_, 0.05)
+        self.assertGreater(cl_p, 0.05)
+
+        # Dependent: both should agree (p < 0.05)
+        rng = np.random.default_rng(seed=42)
+        X = rng.normal(size=300)
+        Y = 2 * X + rng.normal(scale=0.3, size=300)
+        data_np = np.column_stack([X, Y])
+        df = pd.DataFrame(data_np, columns=["X", "Y"])
+
+        test = KCI(data=df)
+        test.run_test("X", "Y", [])
+        cl_p = CIT(data_np, "kci")(0, 1)
+        self.assertLess(test.p_value_, 0.05)
+        self.assertLess(cl_p, 0.05)
+
+    def test_conditional(self):
+        from causallearn.utils.cit import CIT
+
+        # Conditionally independent: both should agree (p > 0.05)
+        rng = np.random.default_rng(seed=7)
+        Z = rng.normal(size=500)
+        X = 2 * Z + rng.normal(scale=0.5, size=500)
+        Y = 3 * Z + rng.normal(scale=0.5, size=500)
+        data_np = np.column_stack([X, Y, Z])
+        df = pd.DataFrame(data_np, columns=["X", "Y", "Z"])
+
+        test = KCI(data=df)
+        test.run_test("X", "Y", ["Z"])
+        cl_p = CIT(data_np, "kci")(0, 1, [2])
+        self.assertGreater(test.p_value_, 0.05)
+        self.assertGreater(cl_p, 0.05)
+
+        # V-structure: both should agree (p < 0.05)
+        rng = np.random.default_rng(seed=42)
+        X = rng.normal(size=300)
+        Y = rng.normal(size=300)
+        Z = 2 * X + 2 * Y + rng.normal(scale=0.3, size=300)
+        data_np = np.column_stack([X, Y, Z])
+        df = pd.DataFrame(data_np, columns=["X", "Y", "Z"])
+
+        test = KCI(data=df)
+        test.run_test("X", "Y", ["Z"])
+        cl_p = CIT(data_np, "kci")(0, 1, [2])
+        self.assertLess(test.p_value_, 0.05)
+        self.assertLess(cl_p, 0.05)
