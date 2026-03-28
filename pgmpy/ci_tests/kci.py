@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 from scipy import stats
-from scipy.spatial.distance import pdist
 from sklearn.gaussian_process.kernels import RBF, Kernel
 
 from ._base import _BaseCITest
@@ -11,45 +10,94 @@ class KCI(_BaseCITest):
     r"""
     Kernel-based Conditional Independence (KCI) test [1].
 
-    When :math:`Z = \emptyset`, this reduces to the HSIC (Hilbert-Schmidt Independence
-    Criterion) test for unconditional independence. When :math:`Z \neq \emptyset`, it
-    performs a kernel-based conditional independence test (KCIT) by regressing out the
-    effect of :math:`Z` from the kernel matrices of :math:`X` and :math:`Y`.
+    This test evaluates whether :math:`X \perp\!\!\!\perp Y \mid Z` by checking whether
+    the residuals of :math:`X` and :math:`Y` (after removing the effect of :math:`Z`)
+    are independent in a reproducing kernel Hilbert space (RKHS). It captures
+    nonlinear dependencies without explicit density estimation.
 
-    Both tests compute p-values via a gamma approximation to the null distribution.
+    Given *n* i.i.d. observations of continuous variables :math:`X`, :math:`Y`, and
+    (optionally) :math:`Z`, define the centred kernel matrix:
+
+    .. math::
+        \tilde{K}_X = H K_X H, \quad
+        H = I - \tfrac{1}{n}\mathbf{1}\mathbf{1}^T.
+
+    **Unconditional test** (:math:`Z = \emptyset`).
+    The statistic reduces to the HSIC V-statistic (Theorem 4, Eq. 8 of [1]):
+
+    .. math::
+        T_{UI} = \frac{1}{n}\operatorname{Tr}(\tilde{K}_X \tilde{K}_Y).
+
+    Under the null, its moments are (Proposition 6(i) of [1]):
+
+    .. math::
+        E(T_{UI} \mid D) = \frac{1}{n^2}
+            \operatorname{Tr}(\tilde{K}_X)\operatorname{Tr}(\tilde{K}_Y), \\
+        \operatorname{Var}(T_{UI} \mid D) = \frac{2}{n^4}
+            \operatorname{Tr}(\tilde{K}_X^2)\operatorname{Tr}(\tilde{K}_Y^2).
+
+    **Conditional test** (:math:`Z \neq \emptyset`).
+    To remove the influence of :math:`Z`, kernel ridge regression is applied.
+    Let :math:`\ddot{X} = (X, Z)`. The residualization operator is (Eq. 10 of [1]):
+
+    .. math::
+        R_Z = I - K_Z (K_Z + \varepsilon I)^{-1}
+            \;\; \equiv \;\; \varepsilon (K_Z + \varepsilon I)^{-1}.
+
+    The residual kernel matrices (Eqs. 11–12 of [1]) are:
+
+    .. math::
+        \tilde{K}_{\ddot{X}|Z} = R_Z \tilde{K}_{\ddot{X}} R_Z, \qquad
+        \tilde{K}_{Y|Z} = R_Z \tilde{K}_Y R_Z.
+
+    The KCI test statistic (Proposition 5, Eq. 13 of [1]) is:
+
+    .. math::
+        T_{CI} = \frac{1}{n}\operatorname{Tr}
+            \bigl(\tilde{K}_{\ddot{X}|Z}\tilde{K}_{Y|Z}\bigr).
+
+    **Null distribution and p-value.**
+    Under :math:`H_0`, the statistic follows a weighted sum of chi-square variables.
+    In practice, a Gamma approximation is used (Sec. 3.4 of [1]):
+
+    .. math::
+        T \sim \Gamma(k, \theta), \quad
+        k = \frac{E^2}{Var}, \quad \theta = \frac{Var}{E}.
 
     Parameters
     ----------
     data : pandas.DataFrame
-        The dataset in which to test the independence condition.
+        Dataset containing variables :math:`X`, :math:`Y`, and optionally :math:`Z`.
 
     kernel_X : sklearn.gaussian_process.kernels.Kernel or None, default=None
-        Kernel for variable X. If ``None``, uses ``RBF`` with bandwidth estimated
-        from the data via the median heuristic from Zhang et al. (2011).
+        Kernel for :math:`X`. If ``None``, an RBF kernel is created with bandwidth
+        set via the empirical width rule from the original Matlab implementation.
 
     kernel_Y : sklearn.gaussian_process.kernels.Kernel or None, default=None
-        Kernel for variable Y. If ``None``, uses ``RBF`` with bandwidth estimated
-        from the data.
+        Kernel for :math:`Y`. Same bandwidth behaviour as ``kernel_X``.
 
     kernel_Z : sklearn.gaussian_process.kernels.Kernel or None, default=None
-        Kernel for conditioning variables Z. If ``None``, uses ``RBF`` with bandwidth
-        estimated from the data.
+        Kernel for :math:`Z`. Same bandwidth behaviour as ``kernel_X``.
+
+    epsilon : float, default=1e-3
+        Regularization parameter :math:`\varepsilon` for kernel ridge regression
+        when residualizing with respect to :math:`Z`.
 
     Attributes
     ----------
     statistic_ : float
-        The test statistic (HSIC V-statistic for unconditional, KCI statistic for
-        conditional). Set after calling the test.
+        Test statistic (:math:`T_{UI}` or :math:`T_{CI}`).
+
     p_value_ : float
-        The p-value for the test via gamma approximation. Set after calling the test.
+        P-value computed via Gamma approximation.
 
     References
     ----------
-    .. [1] Zhang, K., Peters, J., Janzing, D., and Schölkopf, B. (2011).
-           Kernel-based Conditional Independence Test and Application in Causal Discovery.
-           UAI 2011. https://arxiv.org/abs/1202.3775
-    .. [2] Gretton, A., Fukumizu, K., Teo, C., Song, L., Schölkopf, B., and Smola, A.
-           (2008). A Kernel Statistical Test of Independence. NIPS 2007.
+    .. [1] Zhang, K., Peters, J., Janzing, D., Schölkopf, B. (2011).
+        Kernel-based Conditional Independence Test and Application in Causal Discovery.
+        UAI 2011. https://arxiv.org/abs/1202.3775
+    .. [2] Zheng, X., et al. causal-learn: Causal Discovery in Python.
+        https://causal-learn.readthedocs.io/en/latest/
 
     Examples
     --------
@@ -62,9 +110,9 @@ class KCI(_BaseCITest):
     >>> test("X", "Y", [], significance_level=0.05)
     True
     >>> test.statistic_  # doctest: +SKIP
-    48.42...
+    139.97...
     >>> test.p_value_  # doctest: +SKIP
-    0.38...
+    0.39...
 
     Using a custom kernel:
 
@@ -87,57 +135,40 @@ class KCI(_BaseCITest):
         kernel_X: Kernel | None = None,
         kernel_Y: Kernel | None = None,
         kernel_Z: Kernel | None = None,
+        epsilon: float = 1e-3,
     ):
         self.data = data
         self.kernel_X = kernel_X
         self.kernel_Y = kernel_Y
         self.kernel_Z = kernel_Z
+        self.epsilon = epsilon
         super().__init__()
 
-    @staticmethod
-    def _estimate_bandwidth(X):
-        """Estimate RBF kernel bandwidth using the median heuristic.
-
-        Uses the heuristic from Zhang et al. (2011) / causal-learn: the bandwidth is
-        set proportional to the median pairwise distance, scaled by a factor that
-        depends on sample size.
-
-        Parameters
-        ----------
-        X : np.ndarray of shape (n, d)
-            Input data.
-
-        Returns
-        -------
-        length_scale : float
-            Estimated bandwidth for use as ``RBF(length_scale=...)``.
-        """
+    def _empirical_width_hsic(self, X):
+        """Empirical RBF length_scale for unconditional test [2]. theta = (1/w^2)*d."""
         n = X.shape[0]
         if n < 200:
-            factor = 1.2
+            width = 0.8
         elif n < 1200:
-            factor = 0.7
+            width = 0.5
         else:
-            factor = 0.4
+            width = 0.3
+        # theta = 1/length_scale^2 => length_scale = width / sqrt(d)
+        return width / np.sqrt(X.shape[1])
 
-        d = X.shape[1]
-        dists = pdist(X, "euclidean")
-        median_dist = np.median(dists)
+    def _empirical_width_kci(self, Z):
+        """Empirical RBF length_scale for conditional test [2]. theta = (1/w^2)/d."""
+        n = Z.shape[0]
+        if n < 200:
+            width = 1.2
+        elif n < 1200:
+            width = 0.7
+        else:
+            width = 0.4
+        # theta = 1/length_scale^2 => length_scale = width * sqrt(d)
+        return width * np.sqrt(Z.shape[1])
 
-        if median_dist == 0:
-            median_dist = 1.0
-
-        return factor * median_dist / np.sqrt(d)
-
-    def _get_kernel(self, kernel, X):
-        """Return the kernel to use, estimating bandwidth if kernel is None."""
-        if kernel is not None:
-            return kernel
-        length_scale = self._estimate_bandwidth(X)
-        return RBF(length_scale=length_scale)
-
-    @staticmethod
-    def _center_kernel(K):
+    def _center_kernel(self, K):
         """Center a kernel matrix: H @ K @ H where H = I - 1/n.
 
         Computed in O(n^2) without forming H explicitly.
@@ -147,12 +178,8 @@ class KCI(_BaseCITest):
         K_allsum = K_colsums.sum()
         return K - (K_colsums[None, :] + K_colsums[:, None]) / n + (K_allsum / n**2)
 
-    @staticmethod
-    def _gamma_pvalue(test_stat, mean, var):
-        """Compute p-value using gamma approximation.
-
-        Matches the first two moments of the null distribution to a gamma distribution.
-        """
+    def _gamma_pvalue(self, test_stat, mean, var):
+        """Compute p-value using gamma approximation."""
         if var <= 0 or mean <= 0:
             return 1.0
 
@@ -167,49 +194,50 @@ class KCI(_BaseCITest):
         """
         n = x.shape[0]
 
-        kernel_x = self._get_kernel(self.kernel_X, x)
-        kernel_y = self._get_kernel(self.kernel_Y, y)
+        if self.kernel_X is not None:
+            kernel_x = self.kernel_X
+        else:
+            ls = self._empirical_width_hsic(x)
+            kernel_x = RBF(length_scale=ls)
+
+        if self.kernel_Y is not None:
+            kernel_y = self.kernel_Y
+        else:
+            ls = self._empirical_width_hsic(y)
+            kernel_y = RBF(length_scale=ls)
 
         Kx = kernel_x(x)
         Ky = kernel_y(y)
         Kxc = self._center_kernel(Kx)
         Kyc = self._center_kernel(Ky)
 
-        # HSIC V-statistic: sum(Kxc * Kyc)
         test_stat = np.sum(Kxc * Kyc)
 
-        # Gamma approximation for p-value
         mean = np.trace(Kxc) * np.trace(Kyc) / n
         var = 2.0 * np.sum(Kxc**2) * np.sum(Kyc**2) / n**2
 
         return test_stat, self._gamma_pvalue(test_stat, mean, var)
 
-    @staticmethod
-    def _get_uu_prod(KxR, KyR, thresh=1e-5):
+    def _get_uu_prod(self, KxR, KyR, thresh=1e-5):
         """Compute the product matrix whose trace gives null distribution moments."""
         n = KxR.shape[0]
 
-        # Symmetrize to avoid numerical asymmetry issues
         wx, vx = np.linalg.eigh(0.5 * (KxR + KxR.T))
         wy, vy = np.linalg.eigh(0.5 * (KyR + KyR.T))
 
-        # Sort descending
         idx = np.argsort(-wx)
         idy = np.argsort(-wy)
         wx, vx = wx[idx], vx[:, idx]
         wy, vy = wy[idy], vy[:, idy]
 
-        # Keep only significant eigenvalues
         vx = vx[:, wx > np.max(wx) * thresh]
         wx = wx[wx > np.max(wx) * thresh]
         vy = vy[:, wy > np.max(wy) * thresh]
         wy = wy[wy > np.max(wy) * thresh]
 
-        # Scale eigenvectors by sqrt of eigenvalues
         vx = vx @ np.diag(np.sqrt(wx))
         vy = vy @ np.diag(np.sqrt(wy))
 
-        # Form all pairwise element-wise products
         num_eigx = vx.shape[1]
         num_eigy = vy.shape[1]
         size_u = num_eigx * num_eigy
@@ -232,35 +260,40 @@ class KCI(_BaseCITest):
         ``(statistic, p_value)`` via gamma approximation.
         """
         n = x.shape[0]
-        epsilon = 1e-3
+        epsilon = self.epsilon
 
-        kernel_x = self._get_kernel(self.kernel_X, np.hstack([x, 0.5 * z]))
-        kernel_y = self._get_kernel(self.kernel_Y, y)
-        kernel_z = self._get_kernel(self.kernel_Z, z)
+        ls = self._empirical_width_kci(z)
 
-        # Compute kernel matrices
-        # Following Zhang et al.: augment X with 0.5*Z for the X kernel
-        Kx = kernel_x(np.hstack([x, 0.5 * z]))
+        if self.kernel_X is not None:
+            kernel_x = self.kernel_X
+        else:
+            kernel_x = RBF(length_scale=ls)
+
+        if self.kernel_Y is not None:
+            kernel_y = self.kernel_Y
+        else:
+            kernel_y = RBF(length_scale=ls)
+
+        if self.kernel_Z is not None:
+            kernel_z = self.kernel_Z
+        else:
+            kernel_z = RBF(length_scale=ls)
+
+        Kx = kernel_x(np.hstack([x, 0.5 * z]))  # [2]
         Ky = kernel_y(y)
         Kz = kernel_z(z)
 
-        # Center all kernel matrices
         Kx = self._center_kernel(Kx)
         Ky = self._center_kernel(Ky)
         Kz = self._center_kernel(Kz)
 
-        # Regression-based centering to remove effect of Z
-        # Rz = epsilon * (Kz + epsilon * I)^{-1}   (using pseudoinverse for robustness)
         Rz = epsilon * np.linalg.pinv(Kz + epsilon * np.eye(n))
 
-        # Residual kernel matrices
         KxR = Rz @ Kx @ Rz
         KyR = Rz @ Ky @ Rz
 
-        # Test statistic
         test_stat = np.sum(KxR * KyR)
 
-        # Gamma approximation via eigendecomposition
         uu_prod = self._get_uu_prod(KxR, KyR)
         mean = np.trace(uu_prod)
         var = 2.0 * np.trace(uu_prod @ uu_prod)
@@ -280,18 +313,20 @@ class KCI(_BaseCITest):
         """
         data = self.data
 
-        # Z-score normalize
         x = data.loc[:, X].to_numpy().reshape(-1, 1).astype(float)
         y = data.loc[:, Y].to_numpy().reshape(-1, 1).astype(float)
 
-        x = (x - x.mean()) / (x.std(ddof=1) + 1e-10)
-        y = (y - y.mean()) / (y.std(ddof=1) + 1e-10)
+        x = stats.zscore(x, ddof=1, axis=0)
+        x = np.nan_to_num(x, nan=0.0)
+        y = stats.zscore(y, ddof=1, axis=0)
+        y = np.nan_to_num(y, nan=0.0)
 
         if len(Z) == 0:
             self.statistic_, self.p_value_ = self._unconditional_test(x, y)
         else:
             z = data.loc[:, Z].to_numpy().astype(float)
-            z = (z - z.mean(axis=0)) / (z.std(axis=0, ddof=1) + 1e-10)
+            z = stats.zscore(z, ddof=1, axis=0)
+            z = np.nan_to_num(z, nan=0.0)
             self.statistic_, self.p_value_ = self._conditional_test(x, y, z)
 
         return self.statistic_, self.p_value_
