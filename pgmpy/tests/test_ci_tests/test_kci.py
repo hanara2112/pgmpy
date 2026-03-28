@@ -81,6 +81,27 @@ class TestKCI:
         assert not test("X", "Y", ["Z"], significance_level=0.05)
         assert test.p_value_ < 0.05
 
+        # Custom kernels in conditional test
+        test = KCI(
+            data=kci_data["vstruct"],
+            kernel_X=RBF(length_scale=0.5),
+            kernel_Y=RBF(length_scale=0.5),
+            kernel_Z=RBF(length_scale=0.5),
+        )
+        assert not test("X", "Y", ["Z"], significance_level=0.05)
+
+    def test_small_sample(self):
+        # Exercises the n < 200 bandwidth branches
+        rng = np.random.default_rng(seed=42)
+        Z = rng.normal(size=100)
+        X = 2 * Z + rng.normal(scale=0.5, size=100)
+        Y = 3 * Z + rng.normal(scale=0.5, size=100)
+        df = pd.DataFrame({"X": X, "Y": Y, "Z": Z})
+
+        test = KCI(data=df)
+        assert not test("X", "Y", [], significance_level=0.05)
+        assert test("X", "Y", ["Z"], significance_level=0.05)
+
 
 class TestKCICompareCausalLearn:
     """Compare pgmpy KCI against causal-learn (v0.1.4.5, numpy 2.4.3).
