@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
 from scipy import stats
-from skbase.utils.dependencies import _safe_import
 from sklearn.base import clone
 from sklearn.cross_decomposition import CCA
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
+from pgmpy.utils import preprocess_data
 
 from ._base import _BaseCITest
 
@@ -12,8 +14,9 @@ class PillaiTrace(_BaseCITest):
     r"""
     Pillai's trace test for conditional independence with mixed data [1].
 
-    This test first residualizes :math:`X` and :math:`Y` with respect to :math:`[1, Z]` using an estimator (XGBoost by
-    default, but any sklearn-compatible estimator can be provided). For a continuous target :math:`T`, the residual is
+    This test first residualizes :math:`X` and :math:`Y` with respect to :math:`[1, Z]` using an estimator (a
+    RandomForest estimator by default, but any sklearn-compatible estimator can be provided). For a continuous target
+    :math:`T`, the residual is
 
     .. math::
         r_T = T - \hat{T}(Z).
@@ -49,14 +52,13 @@ class PillaiTrace(_BaseCITest):
 
     estimator : estimator instance, optional
         Any sklearn-compatible estimator with ``fit``, ``predict``, and ``predict_proba``
-        (if testing discrete variables) methods. If ``None`` (default), uses XGBoost
-        (``XGBClassifier`` for categorical targets, ``XGBRegressor`` for continuous).
-        Categorical Z columns are one-hot encoded when a custom estimator is used, since
-        most sklearn estimators do not handle them natively.
+        (if testing discrete variables) methods. If ``None`` (default), uses
+        ``RandomForestClassifier`` for categorical targets and ``RandomForestRegressor``
+        for continuous targets. Conditioning variables are one-hot encoded before fitting.
 
     seed : int, optional
-        Random seed for the default XGBoost estimator. Ignored when a custom
-        ``estimator`` is provided.
+        Random seed for the default estimator. Ignored when a custom ``estimator`` is
+        provided.
 
     Attributes
     ----------
@@ -84,27 +86,22 @@ class PillaiTrace(_BaseCITest):
     }
 
     def __init__(self, data: pd.DataFrame, estimator=None, seed=None):
-        self.data = data
+        self.data, self.dtypes = preprocess_data(data)
         self.estimator = estimator
         self.seed = seed
         super().__init__()
 
-    def _fit_predict(self, target_col, Z_data, xgboost=None):
+    def _fit_predict(self, target_col, Z_data):
         """Fit an estimator on Z_data to predict target_col, return predictions and category index."""
-        is_cat = self.data.loc[:, target_col].dtype == "category"
+        is_cat = self.dtypes[target_col] in ("C", "O")
         target_data = self.data.loc[:, target_col]
         cat_index = None
 
         if self.estimator is not None:
             model = clone(self.estimator)
         else:
-            enable_categorical = any(Z_data.dtypes == "category")
-            model_cls = xgboost.XGBClassifier if is_cat else xgboost.XGBRegressor
-            model = model_cls(
-                enable_categorical=enable_categorical,
-                seed=self.seed,
-                random_state=self.seed,
-            )
+            model_cls = RandomForestClassifier if is_cat else RandomForestRegressor
+            model = model_cls(random_state=self.seed)
 
         if is_cat:
             if self.estimator is not None and not hasattr(model, "predict_proba"):
@@ -148,28 +145,20 @@ class PillaiTrace(_BaseCITest):
         p_value : float
             The p-value.
         """
-        data = self.data
-
         # Step 1: Add an intercept column so the estimator always has at least one feature.
         Z = Z + ["_intercept_Z"]
-        data = data.assign(_intercept_Z=np.ones(data.shape[0]))
+        data = self.data.assign(_intercept_Z=np.ones(self.data.shape[0]))
 
-        # Step 2: Prepare Z data. Custom sklearn estimators need one-hot encoded Z;
-        # XGBoost handles categorical columns natively.
-        xgboost = None
-        if self.estimator is not None:
-            Z_data = pd.get_dummies(data.loc[:, Z])
-        else:
-            xgboost = _safe_import("xgboost")
-            Z_data = data.loc[:, Z]
+        # Step 2: Prepare Z data using one-hot encoding for categorical variables.
+        Z_data = pd.get_dummies(data.loc[:, Z])
 
         # Step 3: Get predictions for X and Y given Z.
-        pred_x, x_cat_index = self._fit_predict(X, Z_data, xgboost)
-        pred_y, y_cat_index = self._fit_predict(Y, Z_data, xgboost)
+        pred_x, x_cat_index = self._fit_predict(X, Z_data)
+        pred_y, y_cat_index = self._fit_predict(Y, Z_data)
 
         # Step 4: Compute the residuals.
         def get_residuals(col_name, pred, cat_index):
-            if data.loc[:, col_name].dtype == "category":
+            if self.dtypes[col_name] in ("C", "O"):
                 dummies = pd.get_dummies(data.loc[:, col_name]).loc[:, cat_index.categories[cat_index.codes]]
                 return (dummies - pred).iloc[:, :-1]
             else:
