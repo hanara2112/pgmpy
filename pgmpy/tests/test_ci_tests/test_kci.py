@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from sklearn.gaussian_process.kernels import RBF
 
-from pgmpy.ci_tests import KCI, get_ci_test
+from pgmpy.ci_tests import HSIC, KCI, get_ci_test
 
 
 @pytest.fixture
@@ -41,30 +41,16 @@ def kci_data():
 
 
 class TestKCI:
-    def test_unconditional(self, kci_data):
-        # Independent variables
-        test = KCI(data=kci_data["ind"])
-        assert test("X", "Y", [], significance_level=0.05)
-        assert test.p_value_ > 0.05
+    def test_unconditional_fallback(self, kci_data):
+        # KCI with empty Z should delegate to HSIC
+        test_kci = KCI(data=kci_data["ind"])
+        test_hsic = HSIC(data=kci_data["ind"])
 
-        # Linear dependence
-        test = KCI(data=kci_data["dep"])
-        assert not test("X", "Y", [], significance_level=0.05)
-        assert test.p_value_ < 0.05
+        stat_kci, p_kci = test_kci.run_test("X", "Y", [])
+        stat_hsic, p_hsic = test_hsic.run_test("X", "Y", [])
 
-        # Nonlinear dependence (KCI's advantage over Pearsonr)
-        test = KCI(data=kci_data["nonlinear"])
-        assert not test("X", "Y", [], significance_level=0.05)
-        assert test.p_value_ < 0.05
-
-        # Custom kernel still detects linear dependence
-        test = KCI(
-            data=kci_data["dep"],
-            kernel_X=RBF(length_scale=0.5),
-            kernel_Y=RBF(length_scale=0.5),
-        )
-        assert not test("X", "Y", [], significance_level=0.05)
-        assert test.p_value_ < 0.05
+        assert stat_kci == stat_hsic
+        assert p_kci == p_hsic
 
         # get_ci_test factory returns a KCI instance
         test = get_ci_test(test="kci", data=kci_data["ind"])
@@ -102,6 +88,21 @@ class TestKCI:
         assert not test("X", "Y", [], significance_level=0.05)
         assert test("X", "Y", ["Z"], significance_level=0.05)
 
+    def test_large_sample_and_median_bandwidth(self):
+        # Exercises the n >= 1200 bandwidth branch
+        rng = np.random.default_rng(seed=42)
+        Z = rng.normal(size=1250)
+        X = 2 * Z + rng.normal(scale=0.5, size=1250)
+        Y = 3 * Z + rng.normal(scale=0.5, size=1250)
+        df = pd.DataFrame({"X": X, "Y": Y, "Z": Z})
+
+        test = KCI(data=df)
+        assert test("X", "Y", ["Z"], significance_level=0.05)
+
+        # Exercises the bandwidth="median" branch in conditional test
+        test_median = KCI(data=df, bandwidth="median")
+        assert test_median("X", "Y", ["Z"], significance_level=0.05)
+
 
 class TestKCICompareCausalLearn:
     """Compare pgmpy KCI against causal-learn (v0.1.4.5, numpy 2.4.3).
@@ -110,45 +111,7 @@ class TestKCICompareCausalLearn:
 
         import numpy as np
         from causallearn.utils.KCI.KCI import KCI_UInd, KCI_CInd
-
-        rng = np.random.default_rng(seed=10)
-        data = rng.standard_normal((300, 2))
-        KCI_UInd().compute_pvalue(data[:, 0:1], data[:, 1:2])   # stat=143.38, p=0.36
-
-        rng = np.random.default_rng(seed=42)
-        X = rng.normal(size=300); Y = 2*X + rng.normal(scale=0.3, size=300)
-        KCI_UInd().compute_pvalue(X[:, None], Y[:, None])        # stat=8287.12, p=0.0
-
-        rng = np.random.default_rng(seed=7)
-        Z = rng.normal(size=500)
-        X = 2*Z + rng.normal(scale=0.5, size=500)
-        Y = 3*Z + rng.normal(scale=0.5, size=500)
-        KCI_CInd().compute_pvalue(X[:, None], Y[:, None], Z[:, None])  # stat=2.96, p=0.52
-
-        rng = np.random.default_rng(seed=42)
-        X = rng.normal(size=300); Y = rng.normal(size=300)
-        Z = 2*X + 2*Y + rng.normal(scale=0.3, size=300)
-        KCI_CInd().compute_pvalue(X[:, None], Y[:, None], Z[:, None])  # stat=1084.59, p=0.0
     """
-
-    def test_unconditional(self):
-        # Independent: causal-learn stat=143.3768, p=0.3597
-        rng = np.random.default_rng(seed=10)
-        df = pd.DataFrame(rng.standard_normal((300, 2)), columns=["X", "Y"])
-        test = KCI(data=df)
-        test.run_test("X", "Y", [])
-        assert test.statistic_ == pytest.approx(143.3768, abs=0.01)
-        assert test.p_value_ == pytest.approx(0.3597, abs=0.01)
-
-        # Dependent: causal-learn stat=8287.1236, p=0.0
-        rng = np.random.default_rng(seed=42)
-        X = rng.normal(size=300)
-        Y = 2 * X + rng.normal(scale=0.3, size=300)
-        df = pd.DataFrame(np.column_stack([X, Y]), columns=["X", "Y"])
-        test = KCI(data=df)
-        test.run_test("X", "Y", [])
-        assert test.statistic_ == pytest.approx(8287.1236, abs=0.01)
-        assert test.p_value_ == pytest.approx(0.0, abs=0.001)
 
     def test_conditional(self):
         # Cond. independent: causal-learn stat=2.9587, p=0.5219
