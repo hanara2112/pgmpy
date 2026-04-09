@@ -70,6 +70,26 @@ class TestHSIC:
         test = HSIC(data=hsic_data["dep"], null_dist="permutation", n_permutations=200)
         assert not test("X", "Y", [], significance_level=0.05)
 
+    def test_permutation_random_state_reproducible(self, hsic_data):
+        test_1 = HSIC(data=hsic_data["ind"], null_dist="permutation", n_permutations=50, random_state=7)
+        stat_1, p_value_1 = test_1.run_test("X", "Y", [])
+
+        test_2 = HSIC(data=hsic_data["ind"], null_dist="permutation", n_permutations=50, random_state=7)
+        stat_2, p_value_2 = test_2.run_test("X", "Y", [])
+
+        assert stat_1 == stat_2
+        assert p_value_1 == p_value_2
+
+    def test_invalid_configuration_raises_error(self, hsic_data):
+        with pytest.raises(ValueError, match="bandwidth must be"):
+            HSIC(data=hsic_data["ind"], bandwidth="invalid")
+
+        with pytest.raises(ValueError, match="null_dist must be"):
+            HSIC(data=hsic_data["ind"], null_dist="invalid")
+
+        with pytest.raises(ValueError, match="n_permutations must be"):
+            HSIC(data=hsic_data["ind"], n_permutations=0)
+
     def test_conditional_raises_error(self, hsic_data):
         # HSIC does not support a conditioning set
         df = hsic_data["ind"].copy()

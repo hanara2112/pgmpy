@@ -9,39 +9,27 @@ from ._base import _BaseCITest
 
 class HSIC(_BaseCITest):
     r"""
-    Hilbert-Schmidt Independence Criterion (HSIC) test [1][2].
+    Hilbert-Schmidt Independence Criterion (HSIC) test for marginal independence [1][2].
 
-    An unconditional test of marginal independence :math:`X \perp\!\!\!\perp Y`.
     HSIC detects nonlinear dependencies by measuring the distance between the
     joint distribution and the product of marginals in a reproducing kernel
-    Hilbert space (RKHS), without explicit density estimation.
-
-    Given *n* i.i.d. observations of continuous variables :math:`X` and :math:`Y`,
-    define the centred kernel matrix:
+    Hilbert space (RKHS). The V-statistic is:
 
     .. math::
-        \tilde{K}_X = H K_X H, \quad
-        H = I - \tfrac{1}{n}\mathbf{1}\mathbf{1}^T.
-
-    The HSIC V-statistic (Eq. 4 of [1], Theorem 4 of [2]) is:
-
-    .. math::
-        \widehat{\text{HSIC}}(X, Y) = \frac{1}{n^2}\operatorname{Tr}(\tilde{K}_X \tilde{K}_Y).
+        T = \operatorname{Tr}(\tilde{K}_X \tilde{K}_Y),
+        \quad \tilde{K} = HKH, \quad H = I - \tfrac{1}{n}\mathbf{1}\mathbf{1}^T.
 
     **Null distribution.** Two methods are available via ``null_dist``:
 
-    - ``"gamma"`` (default): fits a Gamma distribution to the first two moments
-      of the null statistic — fast and analytic (Proposition 6(i) of [2]).
-    - ``"permutation"``: builds an empirical null by randomly shuffling the rows
-      of :math:`Y` and recomputing the statistic ``n_permutations`` times —
-      slower but assumption-free (Section 4 of [1]).
+    - ``"gamma"`` (default): fits a Gamma distribution using the exact
+      finite-sample moments from Proposition 6(i) of [2].
+    - ``"permutation"``: empirical null by shuffling :math:`Y`
+      ``n_permutations`` times.
 
     **Bandwidth selection.** Two heuristics are available via ``bandwidth``:
 
-    - ``"empirical"`` (default): a piecewise rule ported from the KCI Matlab
-      reference implementation [3], ``length_scale = w / sqrt(d)``.
-    - ``"median"``: the median pairwise-distance heuristic (Section 2.3 of [4]),
-      ``length_scale = median(||x_i - x_j||)`` — more adaptive to data scale.
+    - ``"empirical"`` (default): piecewise rule from the KCI Matlab reference [3].
+    - ``"median"``: median pairwise-distance heuristic.
 
     Parameters
     ----------
@@ -49,74 +37,49 @@ class HSIC(_BaseCITest):
         Dataset containing the variables to test.
 
     kernel_X : sklearn.gaussian_process.kernels.Kernel or None, default=None
-        Kernel for :math:`X`. If ``None``, an RBF kernel is built automatically
-        using the heuristic specified by ``bandwidth``.
+        Kernel for :math:`X`. If ``None``, an RBF kernel is built using ``bandwidth``.
 
     kernel_Y : sklearn.gaussian_process.kernels.Kernel or None, default=None
         Kernel for :math:`Y`. Same behaviour as ``kernel_X``.
 
     bandwidth : {"empirical", "median"}, default="empirical"
-        Bandwidth selection heuristic used when ``kernel_X`` or ``kernel_Y``
-        is ``None``.
+        Bandwidth heuristic when a kernel is ``None``.
 
     null_dist : {"gamma", "permutation"}, default="gamma"
-        Method used to compute the p-value under :math:`H_0`.
+        Method for computing the p-value under :math:`H_0`.
 
     n_permutations : int, default=500
         Number of permutations. Only used when ``null_dist="permutation"``.
+
+    random_state : int, numpy.random.Generator, or None, default=None
+        Seed for the permutation null. Ignored when ``null_dist="gamma"``.
 
     Attributes
     ----------
     statistic_ : float
         Observed HSIC statistic :math:`T = \operatorname{Tr}(\tilde{K}_X \tilde{K}_Y)`.
-
     p_value_ : float
         P-value computed via the method specified by ``null_dist``.
 
     References
     ----------
     .. [1] Gretton, A., Bousquet, O., Smola, A., & Schölkopf, B. (2005).
-        Measuring Statistical Dependence with Hilbert-Schmidt Norms.
-        ALT 2005. https://doi.org/10.1007/11564089_7
+        Measuring Statistical Dependence with Hilbert-Schmidt Norms. ALT 2005.
     .. [2] Gretton, A., Fukumizu, K., Teo, C. H., Song, L., Schölkopf, B., & Smola, A. J. (2007).
-        A Kernel Statistical Test of Independence.
-        NeurIPS 2007. https://papers.nips.cc/paper/3201
+        A Kernel Statistical Test of Independence. NeurIPS 2007.
     .. [3] Zhang, K., Peters, J., Janzing, D., & Schölkopf, B. (2011).
-        Kernel-based Conditional Independence Test and Application in Causal Discovery.
-        UAI 2011. https://arxiv.org/abs/1202.3775
-    .. [4] Gretton, A., Borgwardt, K. M., Rasch, M. J., Schölkopf, B., & Smola, A. (2012).
-        A Kernel Two-Sample Test. JMLR, 13, 723–773.
+        Kernel-based Conditional Independence Test and Application in Causal Discovery. UAI 2011.
 
     Examples
     --------
-    Test marginal independence between two variables:
-
-    >>> import numpy as np
-    >>> import pandas as pd
+    >>> import numpy as np, pandas as pd
     >>> from pgmpy.ci_tests import HSIC
     >>> rng = np.random.default_rng(seed=42)
     >>> data = pd.DataFrame(rng.standard_normal((300, 3)), columns=["X", "Y", "Z"])
     >>> test = HSIC(data=data)
     >>> test("X", "Y", [], significance_level=0.05)
     True
-
-    Use the median heuristic for bandwidth:
-
-    >>> test = HSIC(data=data, bandwidth="median")
-    >>> test("X", "Y", [], significance_level=0.05)
-    True
-
-    Use a permutation-based p-value:
-
-    >>> test = HSIC(data=data, null_dist="permutation", n_permutations=200)
-    >>> test("X", "Y", [], significance_level=0.05)
-    True
-
-    Pass a custom RBF kernel:
-
-    >>> from sklearn.gaussian_process.kernels import RBF
-    >>> test = HSIC(data=data, kernel_X=RBF(length_scale=2.0))
-    >>> test("X", "Y", [], significance_level=0.05)
+    >>> test.p_value_ > 0.05
     True
     """
 
@@ -135,51 +98,85 @@ class HSIC(_BaseCITest):
         bandwidth: str = "empirical",
         null_dist: str = "gamma",
         n_permutations: int = 500,
+        random_state: int | np.random.Generator | None = None,
     ):
+        if bandwidth not in ("empirical", "median"):
+            raise ValueError(f"bandwidth must be 'empirical' or 'median', got {bandwidth!r}")
+        if null_dist not in ("gamma", "permutation"):
+            raise ValueError(f"null_dist must be 'gamma' or 'permutation', got {null_dist!r}")
+        if n_permutations < 1:
+            raise ValueError(f"n_permutations must be >= 1, got {n_permutations!r}")
+
         self.data = data
         self.kernel_X = kernel_X
         self.kernel_Y = kernel_Y
         self.bandwidth = bandwidth
         self.null_dist = null_dist
         self.n_permutations = n_permutations
+        self.random_state = random_state
         super().__init__()
 
-    def _empirical_width(self, X: np.ndarray) -> float:
-        """Piecewise RBF length_scale from the KCI Matlab reference [3]. length_scale = w / sqrt(d)."""
-        n = X.shape[0]
-        if n < 200:
-            width = 0.8
-        elif n < 1200:
-            width = 0.5
-        else:
-            width = 0.3
-        return width / np.sqrt(X.shape[1])
-
-    def _median_width(self, X: np.ndarray) -> float:
-        """Median heuristic matching causal-learn: length_scale = sqrt(2) * median(euclidean_dist)."""
-        median_dist = np.median(pdist(X, metric="euclidean"))
-        return float(np.sqrt(2.0) * median_dist) if median_dist > 0 else 1.0
-
     def _get_length_scale(self, X: np.ndarray) -> float:
-        """Dispatch to the bandwidth heuristic selected by ``self.bandwidth``."""
+        """Return RBF length-scale via the selected heuristic."""
         if self.bandwidth == "median":
             return self._median_width(X)
         return self._empirical_width(X)
 
-    def _center_kernel(self, K: np.ndarray) -> np.ndarray:
-        """Return doubly-centred kernel H @ K @ H, computed in O(n²) without forming H."""
-        K_colsums = K.sum(axis=0)
-        K_allsum = K_colsums.sum()
-        n = K.shape[0]
-        return K - (K_colsums[None, :] + K_colsums[:, None]) / n + (K_allsum / n**2)
+    def _empirical_width(self, X: np.ndarray) -> float:
+        """Piecewise RBF length_scale from the KCI Matlab reference [3]."""
+        n = X.shape[0]
+        width = 0.8 if n < 200 else (0.5 if n < 1200 else 0.3)
+        return width / np.sqrt(X.shape[1])
+
+    def _median_width(self, X: np.ndarray) -> float:
+        """Median heuristic: length_scale = sqrt(2) * median(euclidean_dists)."""
+        med = np.median(pdist(X, metric="euclidean"))
+        return float(np.sqrt(2.0) * med) if med > 0 else 1.0
+
+    @staticmethod
+    def _center_kernel(K: np.ndarray) -> np.ndarray:
+        """Doubly-centre K via H @ K @ H in O(n²) without forming H."""
+        col_mean = K.mean(axis=0)
+        return K - col_mean[None, :] - col_mean[:, None] + col_mean.mean()
 
     def _gamma_pvalue(self, test_stat: float, mean: float, var: float) -> float:
-        """P-value via Gamma approximation (Proposition 6(i) of [2]). Returns 1.0 when degenerate."""
+        """P-value via Gamma moment-matching from precomputed (mean, var).
+
+        Used by :class:`KCI` for the conditional path, where the null moments
+        come from eigendecomposition rather than kernel matrices.
+        """
         if var <= 0 or mean <= 0:
             return 1.0
         k = mean**2 / var
         theta = var / mean
         return float(1.0 - stats.gamma.cdf(test_stat, a=k, scale=theta))
+
+    def _hsic_gamma_pvalue(self, test_stat: float, K: np.ndarray, L: np.ndarray) -> float:
+        """P-value using exact finite-sample null moments from Proposition 6(i) of [2]."""
+        n = K.shape[0]
+        if n < 6:
+            return 1.0
+
+        Kc, Lc = self._center_kernel(K), self._center_kernel(L)
+        bone = np.ones((n, 1))
+
+        # Exact finite-sample null variance for T / n.
+        var_hsic = (np.sum((Kc * Lc / 6.0) ** 2) - np.trace((Kc * Lc / 6.0) ** 2)) / n / (n - 1)
+        var_hsic *= 72.0 * (n - 4) * (n - 5) / n / (n - 1) / (n - 2) / (n - 3)
+
+        # Exact finite-sample null mean for T / n from off-diagonal kernel means.
+        K_nd = K - np.diag(np.diag(K))
+        L_nd = L - np.diag(np.diag(L))
+        mu_x = (bone.T @ K_nd @ bone).item() / n / (n - 1)
+        mu_y = (bone.T @ L_nd @ bone).item() / n / (n - 1)
+        mean_hsic = (1.0 + mu_x * mu_y - mu_x - mu_y) / n
+
+        if var_hsic <= 0 or mean_hsic <= 0:
+            return 1.0
+
+        alpha = mean_hsic**2 / var_hsic
+        beta = var_hsic * n / mean_hsic
+        return float(1.0 - stats.gamma.cdf(test_stat / n, a=alpha, scale=beta))
 
     def _permutation_pvalue(
         self,
@@ -188,14 +185,14 @@ class HSIC(_BaseCITest):
         y: np.ndarray,
         kernel_y: Kernel,
     ) -> float:
-        """Empirical p-value via row-permutation of Y (Section 4 of [1])."""
-        rng = np.random.default_rng()
+        """Empirical p-value by permuting rows of Y (Section 4 of [1])."""
+        rng = np.random.default_rng(self.random_state)
         n = y.shape[0]
-        count = sum(
-            float(np.sum(Kxc * self._center_kernel(kernel_y(y[rng.permutation(n)])))) >= test_stat
-            for _ in range(self.n_permutations)
-        )
-        return count / self.n_permutations
+        null_stats = np.empty(self.n_permutations)
+        for i in range(self.n_permutations):
+            Lyc = self._center_kernel(kernel_y(y[rng.permutation(n)]))
+            null_stats[i] = float(np.sum(Kxc * Lyc))
+        return float(np.mean(null_stats >= test_stat))
 
     def run_test(
         self,
@@ -206,57 +203,26 @@ class HSIC(_BaseCITest):
         r"""
         Compute HSIC statistic and p-value for :math:`X \perp Y`.
 
-        HSIC is a marginal independence test; ``Z`` must be empty.
-        For conditional independence testing use :class:`KCI` instead.
-
-        Parameters
-        ----------
-        X : str
-            Column name of the first variable.
-        Y : str
-            Column name of the second variable.
-        Z : list
-            Must be an empty list. HSIC does not support conditioning.
-
-        Returns
-        -------
-        statistic : float
-            Observed HSIC statistic :math:`T = \operatorname{Tr}(\tilde{K}_X \tilde{K}_Y)`.
-        p_value : float
-            P-value from the method specified by ``self.null_dist``.
-
-        Raises
-        ------
-        ValueError
-            If ``Z`` is non-empty.
+        Sets ``self.statistic_`` and ``self.p_value_``. ``Z`` must be empty;
+        use :class:`KCI` for conditional tests.
         """
         if len(Z) > 0:
-            raise ValueError(
-                "HSIC is a marginal independence test and does not support a "
-                "conditioning set Z. Use KCI for conditional independence testing."
-            )
+            raise ValueError("HSIC is a marginal independence test and does not support conditioning. Use KCI instead.")
 
-        data = self.data
-        x = stats.zscore(data.loc[:, X].to_numpy().reshape(-1, 1).astype(float), ddof=1, axis=0)
-        y = stats.zscore(data.loc[:, Y].to_numpy().reshape(-1, 1).astype(float), ddof=1, axis=0)
-        x = np.nan_to_num(x, nan=0.0)
-        y = np.nan_to_num(y, nan=0.0)
-
-        n = x.shape[0]
+        x = np.nan_to_num(stats.zscore(self.data.loc[:, X].to_numpy().reshape(-1, 1).astype(float), ddof=1, axis=0))
+        y = np.nan_to_num(stats.zscore(self.data.loc[:, Y].to_numpy().reshape(-1, 1).astype(float), ddof=1, axis=0))
 
         kernel_x = self.kernel_X if self.kernel_X is not None else RBF(length_scale=self._get_length_scale(x))
         kernel_y = self.kernel_Y if self.kernel_Y is not None else RBF(length_scale=self._get_length_scale(y))
 
-        Kxc = self._center_kernel(kernel_x(x))
-        Kyc = self._center_kernel(kernel_y(y))
+        Kx, Ky = kernel_x(x), kernel_y(y)
+        Kxc, Kyc = self._center_kernel(Kx), self._center_kernel(Ky)
         test_stat = float(np.sum(Kxc * Kyc))
 
         if self.null_dist == "permutation":
             p_value = self._permutation_pvalue(test_stat, Kxc, y, kernel_y)
         else:
-            mean = np.trace(Kxc) * np.trace(Kyc) / n
-            var = 2.0 * np.sum(Kxc**2) * np.sum(Kyc**2) / n**2
-            p_value = self._gamma_pvalue(test_stat, mean, var)
+            p_value = self._hsic_gamma_pvalue(test_stat, Kx, Ky)
 
         self.statistic_ = test_stat
         self.p_value_ = p_value
