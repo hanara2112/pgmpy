@@ -11,7 +11,7 @@ def hsic_data():
     """Generate test dataframes for HSIC tests."""
     rng = np.random.default_rng(seed=42)
 
-    # Draw 3 columns so rng state matches KCI fixture (X, Y independent Z consumed)
+    # Draw 3 columns so rng state matches KCI fixture (X, Y independent Z consumed).
     df_ind = pd.DataFrame(rng.standard_normal((200, 3)), columns=["X", "Y", "Z"])
 
     X = rng.normal(size=300)
@@ -29,73 +29,84 @@ def hsic_data():
     }
 
 
+def _assert_independence_result(test: HSIC, expected_independent: bool) -> None:
+    assert test("X", "Y", [], significance_level=0.05) == expected_independent
+    assert (test.p_value_ >= 0.05) == expected_independent
+
+
+def _make_causal_learn_reference_data(case: str) -> pd.DataFrame:
+    if case == "independent":
+        rng = np.random.default_rng(seed=10)
+        return pd.DataFrame(rng.standard_normal((300, 2)), columns=["X", "Y"])
+
+    if case == "dependent":
+        rng = np.random.default_rng(seed=42)
+        X = rng.normal(size=300)
+        Y = 2 * X + rng.normal(scale=0.3, size=300)
+        return pd.DataFrame({"X": X, "Y": Y})
+
+    raise ValueError(f"Unknown causal-learn reference case: {case}")
+
+
 class TestHSIC:
-    def test_unconditional(self, hsic_data):
-        # Independent variables — Gamma approximation (default)
-        test = HSIC(data=hsic_data["ind"])
-        assert test("X", "Y", [], significance_level=0.05)
-        assert test.p_value_ > 0.05
+    @pytest.mark.parametrize(
+        ("data_key", "kwargs", "expected_independent"),
+        [
+            pytest.param("ind", {}, True, id="gamma-independent"),
+            pytest.param("dep", {}, False, id="gamma-linear"),
+            pytest.param("nonlinear", {}, False, id="gamma-nonlinear"),
+            pytest.param(
+                "dep",
+                {"kernel_X": RBF(length_scale=0.5), "kernel_Y": RBF(length_scale=0.5)},
+                False,
+                id="custom-kernel",
+            ),
+            pytest.param("ind", {"bandwidth": "median"}, True, id="median-independent"),
+            pytest.param("dep", {"bandwidth": "median"}, False, id="median-dependent"),
+            pytest.param(
+                "ind",
+                {"null_dist": "permutation", "n_permutations": 200},
+                True,
+                id="permutation-independent",
+            ),
+            pytest.param(
+                "dep",
+                {"null_dist": "permutation", "n_permutations": 200},
+                False,
+                id="permutation-dependent",
+            ),
+        ],
+    )
+    def test_unconditional_variants(self, hsic_data, data_key, kwargs, expected_independent):
+        _assert_independence_result(HSIC(data=hsic_data[data_key], **kwargs), expected_independent)
 
-        # Linear dependence detected
-        test = HSIC(data=hsic_data["dep"])
-        assert not test("X", "Y", [], significance_level=0.05)
-        assert test.p_value_ < 0.05
-
-        # Nonlinear dependence detected (HSIC's advantage over Pearsonr)
-        test = HSIC(data=hsic_data["nonlinear"])
-        assert not test("X", "Y", [], significance_level=0.05)
-        assert test.p_value_ < 0.05
-
-        # Custom kernel still detects dependence
-        test = HSIC(data=hsic_data["dep"], kernel_X=RBF(length_scale=0.5), kernel_Y=RBF(length_scale=0.5))
-        assert not test("X", "Y", [], significance_level=0.05)
-
-        # get_ci_test factory returns an HSIC instance
-        test = get_ci_test(test="hsic", data=hsic_data["ind"])
-        assert isinstance(test, HSIC)
-
-    def test_bandwidth_median(self, hsic_data):
-        # Median heuristic should detect independence and dependence as well
-        test = HSIC(data=hsic_data["ind"], bandwidth="median")
-        assert test("X", "Y", [], significance_level=0.05)
-
-        test = HSIC(data=hsic_data["dep"], bandwidth="median")
-        assert not test("X", "Y", [], significance_level=0.05)
-
-    def test_null_dist_permutation(self, hsic_data):
-        # Permutation test should agree with Gamma for clear-cut cases
-        test = HSIC(data=hsic_data["ind"], null_dist="permutation", n_permutations=200)
-        assert test("X", "Y", [], significance_level=0.05)
-
-        test = HSIC(data=hsic_data["dep"], null_dist="permutation", n_permutations=200)
-        assert not test("X", "Y", [], significance_level=0.05)
+    def test_get_ci_test_returns_hsic(self, hsic_data):
+        assert isinstance(get_ci_test(test="hsic", data=hsic_data["ind"]), HSIC)
 
     def test_permutation_random_state_reproducible(self, hsic_data):
-        test_1 = HSIC(data=hsic_data["ind"], null_dist="permutation", n_permutations=50, random_state=7)
-        stat_1, p_value_1 = test_1.run_test("X", "Y", [])
+        kwargs = {"null_dist": "permutation", "n_permutations": 50, "random_state": 7}
 
-        test_2 = HSIC(data=hsic_data["ind"], null_dist="permutation", n_permutations=50, random_state=7)
-        stat_2, p_value_2 = test_2.run_test("X", "Y", [])
+        stat_1, p_value_1 = HSIC(data=hsic_data["ind"], **kwargs).run_test("X", "Y", [])
+        stat_2, p_value_2 = HSIC(data=hsic_data["ind"], **kwargs).run_test("X", "Y", [])
 
         assert stat_1 == stat_2
         assert p_value_1 == p_value_2
 
-    def test_invalid_configuration_raises_error(self, hsic_data):
-        with pytest.raises(ValueError, match="bandwidth must be"):
-            HSIC(data=hsic_data["ind"], bandwidth="invalid")
-
-        with pytest.raises(ValueError, match="null_dist must be"):
-            HSIC(data=hsic_data["ind"], null_dist="invalid")
-
-        with pytest.raises(ValueError, match="n_permutations must be"):
-            HSIC(data=hsic_data["ind"], n_permutations=0)
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            pytest.param({"bandwidth": "invalid"}, "bandwidth must be", id="invalid-bandwidth"),
+            pytest.param({"null_dist": "invalid"}, "null_dist must be", id="invalid-null-dist"),
+            pytest.param({"n_permutations": 0}, "n_permutations must be", id="invalid-n-permutations"),
+        ],
+    )
+    def test_invalid_configuration_raises_error(self, hsic_data, kwargs, message):
+        with pytest.raises(ValueError, match=message):
+            HSIC(data=hsic_data["ind"], **kwargs)
 
     def test_conditional_raises_error(self, hsic_data):
-        # HSIC does not support a conditioning set
-        df = hsic_data["ind"].copy()
-        test = HSIC(data=df)
         with pytest.raises(ValueError, match="marginal independence test"):
-            test("X", "Y", ["Z"])
+            HSIC(data=hsic_data["ind"])("X", "Y", ["Z"])
 
 
 class TestHSICCompareCausalLearn:
@@ -115,21 +126,16 @@ class TestHSICCompareCausalLearn:
         KCI_UInd().compute_pvalue(X[:, None], Y[:, None])        # stat=8287.12, p=0.0
     """
 
-    def test_unconditional(self):
-        # Independent: causal-learn stat=143.3768, p=0.3597
-        rng = np.random.default_rng(seed=10)
-        df = pd.DataFrame(rng.standard_normal((300, 2)), columns=["X", "Y"])
-        test = HSIC(data=df)
+    @pytest.mark.parametrize(
+        ("case", "expected_stat", "expected_p", "p_abs"),
+        [
+            pytest.param("independent", 143.3768, 0.3597, 0.01, id="independent"),
+            pytest.param("dependent", 8287.1236, 0.0, 0.001, id="dependent"),
+        ],
+    )
+    def test_unconditional(self, case, expected_stat, expected_p, p_abs):
+        test = HSIC(data=_make_causal_learn_reference_data(case))
         test.run_test("X", "Y", [])
-        assert test.statistic_ == pytest.approx(143.3768, abs=0.01)
-        assert test.p_value_ == pytest.approx(0.3597, abs=0.01)
 
-        # Dependent: causal-learn stat=8287.1236, p=0.0
-        rng = np.random.default_rng(seed=42)
-        X = rng.normal(size=300)
-        Y = 2 * X + rng.normal(scale=0.3, size=300)
-        df = pd.DataFrame(np.column_stack([X, Y]), columns=["X", "Y"])
-        test = HSIC(data=df)
-        test.run_test("X", "Y", [])
-        assert test.statistic_ == pytest.approx(8287.1236, abs=0.01)
-        assert test.p_value_ == pytest.approx(0.0, abs=0.001)
+        assert test.statistic_ == pytest.approx(expected_stat, abs=0.01)
+        assert test.p_value_ == pytest.approx(expected_p, abs=p_abs)

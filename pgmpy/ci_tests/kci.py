@@ -6,6 +6,16 @@ from sklearn.gaussian_process.kernels import RBF, Kernel
 from .hsic import HSIC
 
 
+def _gamma_pvalue_from_moments(test_stat: float, mean: float, var: float) -> float:
+    """Return a Gamma-approximation p-value from precomputed null moments."""
+    if var <= 0 or mean <= 0:
+        return 1.0
+
+    k = mean**2 / var
+    theta = var / mean
+    return float(1.0 - stats.gamma.cdf(test_stat, a=k, scale=theta))
+
+
 class KCI(HSIC):
     r"""
     Kernel-based Conditional Independence (KCI) test [1].
@@ -225,7 +235,7 @@ class KCI(HSIC):
         mean = np.trace(uu_prod)
         var = 2.0 * np.trace(uu_prod @ uu_prod)
 
-        return test_stat, self._gamma_pvalue(test_stat, mean, var)
+        return test_stat, _gamma_pvalue_from_moments(test_stat, mean, var)
 
     def run_test(
         self,
