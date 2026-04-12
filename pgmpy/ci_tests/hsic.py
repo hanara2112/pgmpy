@@ -88,8 +88,6 @@ class HSIC(_BaseCITest):
         self.random_state = random_state
         super().__init__()
 
-    # --- bandwidth heuristics ------------------------------------------------
-
     def _empirical_width(self, X: np.ndarray) -> float:
         """Piecewise RBF length-scale from the KCI Matlab reference [3]."""
         n = X.shape[0]
@@ -102,26 +100,20 @@ class HSIC(_BaseCITest):
         return np.sqrt(2.0) * med if med > 0 else 1.0
 
     def _length_scale(self, X: np.ndarray) -> float:
-        """RBF length-scale via the selected heuristic."""
         if self.bandwidth == "median":
             return self._median_width(X)
         return self._empirical_width(X)
 
-    # --- kernel utilities ----------------------------------------------------
-
     @staticmethod
     def _center_kernel(K: np.ndarray) -> np.ndarray:
-        """Doubly-centre K in O(n²) without forming H."""
+        """Double-centre a kernel matrix."""
         col_mean = K.mean(axis=0)
         return K - col_mean[None, :] - col_mean[:, None] + col_mean.mean()
 
     def _make_kernel(self, user_kernel, X):
-        """Return user kernel or build RBF with heuristic bandwidth."""
         if user_kernel is not None:
             return user_kernel
         return RBF(length_scale=self._length_scale(X))
-
-    # --- p-value computation -------------------------------------------------
 
     def _hsic_gamma_pvalue(self, test_stat, K, L, Kc, Lc):
         """Gamma p-value using exact null moments (Proposition 6(i) of [2]).
@@ -166,8 +158,6 @@ class HSIC(_BaseCITest):
             null_stats[i] = np.sum(Kxc * Lyc)
         return (1 + np.sum(null_stats >= test_stat)) / (1 + self.n_permutations)
 
-    # --- main entry point ----------------------------------------------------
-
     def run_test(self, X: str, Y: str, Z: list):
         r"""
         Test :math:`X \perp Y`. Z must be empty; use KCI for conditional tests.
@@ -175,9 +165,8 @@ class HSIC(_BaseCITest):
         Returns (statistic, p_value) and sets self.statistic_, self.p_value_.
         """
         if Z:
-            raise ValueError("HSIC is a marginal independence test and does not support conditioning. Use KCI instead.")
+            raise ValueError("HSIC does not support conditioning variables. Use KCI instead.")
 
-        # Preprocess: z-score, guard constant columns.
         x = self.data[X].to_numpy(dtype=float).reshape(-1, 1)
         y = self.data[Y].to_numpy(dtype=float).reshape(-1, 1)
         x = np.nan_to_num(stats.zscore(x, ddof=1, axis=0))
