@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.gaussian_process.kernels import RBF
 
 from pgmpy.ci_tests import HSIC
 
@@ -40,6 +41,30 @@ class TestHSIC:
         test = HSIC(data=df_nonlinear)
         assert not test("X", "Y", [], significance_level=0.05)
         assert test.p_value_ < 0.05
+
+    def test_median_bandwidth(self, hsic_data):
+        df_ind, df_dep, _ = hsic_data
+        assert HSIC(data=df_ind, bandwidth="median")("X", "Y", [], significance_level=0.05)
+        assert not HSIC(data=df_dep, bandwidth="median")("X", "Y", [], significance_level=0.05)
+
+    def test_custom_kernel(self, hsic_data):
+        _, df_dep, _ = hsic_data
+        test = HSIC(data=df_dep, kernel_X=RBF(0.5), kernel_Y=RBF(0.5))
+        assert not test("X", "Y", [], significance_level=0.05)
+
+    def test_permutation(self, hsic_data):
+        df_ind, df_dep, _ = hsic_data
+        assert HSIC(data=df_ind, null_dist="permutation", n_permutations=200, random_state=0)(
+            "X", "Y", [], significance_level=0.05
+        )
+        assert not HSIC(data=df_dep, null_dist="permutation", n_permutations=200, random_state=0)(
+            "X", "Y", [], significance_level=0.05
+        )
+
+    def test_small_n(self):
+        df = pd.DataFrame({"X": [1.0, 2.0, 3.0, 4.0, 5.0], "Y": [5.0, 4.0, 3.0, 2.0, 1.0]})
+        _, p = HSIC(data=df).run_test("X", "Y", [])
+        assert p == 1.0
 
     def test_conditioning_not_supported(self, hsic_data):
         df_ind, _, _ = hsic_data
