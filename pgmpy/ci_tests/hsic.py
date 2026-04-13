@@ -35,6 +35,13 @@ class HSIC(_BaseCITest):
     random_state : int, np.random.Generator, or None, default=None
         Seed for permutation reproducibility.
 
+    Attributes
+    ----------
+    statistic_ : float
+        The HSIC V-statistic. Set after calling the test.
+    p_value_ : float
+        The p-value for the test. Set after calling the test.
+
     References
     ----------
     .. [1] Gretton et al. (2005). Measuring Statistical Dependence
@@ -116,17 +123,7 @@ class HSIC(_BaseCITest):
         return RBF(length_scale=self._length_scale(X))
 
     def _hsic_gamma_pvalue(self, test_stat, K, L, Kc, Lc):
-        """Gamma p-value using exact null moments (Proposition 6(i) of [2]).
-
-        Parameters
-        ----------
-        test_stat : float
-            Observed statistic T = Tr(Kc @ Lc).
-        K, L : ndarray
-            Uncentred Gram matrices.
-        Kc, Lc : ndarray
-            Centred Gram matrices HKH, HLH.
-        """
+        """Gamma p-value using exact null moments (Proposition 6(i) of [2])."""
         n = K.shape[0]
         if n < 6:
             return 1.0
