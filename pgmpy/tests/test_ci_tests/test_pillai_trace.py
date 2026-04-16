@@ -206,3 +206,38 @@ def test_pillai_tests_approx(pillai_data):
 
     assert np.all(np.array(computed_coefs) >= 0.05)
     assert np.all(np.array(computed_pvalues) <= 0.05)
+
+
+#     def test_pillai_custom_estimators(self):
+#         """Test PillaiTrace with custom sklearn estimators on continuous and categorical data."""
+#         # Continuous data
+#         reg_estimator = GradientBoostingRegressor(n_estimators=50, random_state=42)
+#
+#         test_indep = PillaiTrace(data=self.df_indep, estimator=reg_estimator)
+#         result_indep = test_indep("X", "Y", ["Z1", "Z2", "Z3"])
+#         self.assertIsInstance(result_indep, (bool, np.bool_))
+#         self.assertTrue(
+#             test_indep.p_value_ > 0.05
+#         )
+#
+#         test_dep = PillaiTrace(data=self.df_dep, estimator=reg_estimator)
+#         result_dep = test_dep("X", "Y", ["Z1", "Z2", "Z3"])
+#         self.assertIsInstance(result_dep, (bool, np.bool_))
+#         self.assertTrue(test_dep.p_value_ < 0.05)
+#
+#         # Categorical data
+#         clf_estimator = RandomForestClassifier(n_estimators=50, random_state=42)
+#
+#         test_cat = PillaiTrace(data=self.df_indep_cat_cat, estimator=clf_estimator)
+#         result_cat = test_cat("X", "Y", ["Z1", "Z2", "Z3"])
+#         self.assertIsInstance(result_cat, (bool, np.bool_))
+#         self.assertTrue(test_cat.p_value_ > 0.05)
+#
+#     def test_pillai_custom_estimator_no_predict_proba(self):
+#         """Test that ValueError is raised when estimator lacks predict_proba for discrete variable."""
+#         estimator = LinearRegression()
+#
+#         test = PillaiTrace(data=self.df_indep_cat_cat, estimator=estimator)
+#
+#         with self.assertRaisesRegex(ValueError, "predict_proba"):
+#             test("X", "Y", ["Z1", "Z2", "Z3"])
