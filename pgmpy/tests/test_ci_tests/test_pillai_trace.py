@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.linear_model import LinearRegression
 
 from pgmpy.ci_tests import PillaiTrace
 from pgmpy.factors.continuous import LinearGaussianCPD
@@ -207,36 +208,35 @@ def test_pillai_tests_approx(pillai_data):
     assert np.all(np.array(computed_pvalues) <= 0.05)
 
 
-#     def test_pillai_custom_estimators(self):
-#         """Test PillaiTrace with custom sklearn estimators on continuous and categorical data."""
-#         # Continuous data
-#         reg_estimator = GradientBoostingRegressor(n_estimators=50, random_state=42)
-#
-#         test_indep = PillaiTrace(data=self.df_indep, estimator=reg_estimator)
-#         result_indep = test_indep("X", "Y", ["Z1", "Z2", "Z3"])
-#         self.assertIsInstance(result_indep, (bool, np.bool_))
-#         self.assertTrue(
-#             test_indep.p_value_ > 0.05
-#         )
-#
-#         test_dep = PillaiTrace(data=self.df_dep, estimator=reg_estimator)
-#         result_dep = test_dep("X", "Y", ["Z1", "Z2", "Z3"])
-#         self.assertIsInstance(result_dep, (bool, np.bool_))
-#         self.assertTrue(test_dep.p_value_ < 0.05)
-#
-#         # Categorical data
-#         clf_estimator = RandomForestClassifier(n_estimators=50, random_state=42)
-#
-#         test_cat = PillaiTrace(data=self.df_indep_cat_cat, estimator=clf_estimator)
-#         result_cat = test_cat("X", "Y", ["Z1", "Z2", "Z3"])
-#         self.assertIsInstance(result_cat, (bool, np.bool_))
-#         self.assertTrue(test_cat.p_value_ > 0.05)
-#
-#     def test_pillai_custom_estimator_no_predict_proba(self):
-#         """Test that ValueError is raised when estimator lacks predict_proba for discrete variable."""
-#         estimator = LinearRegression()
-#
-#         test = PillaiTrace(data=self.df_indep_cat_cat, estimator=estimator)
-#
-#         with self.assertRaisesRegex(ValueError, "predict_proba"):
-#             test("X", "Y", ["Z1", "Z2", "Z3"])
+def test_pillai_linear_regression_estimator():
+    rng = np.random.default_rng(0)
+    n = 2000
+    Z = rng.normal(size=(n, 2))
+    X = Z @ [0.5, 0.5] + rng.normal(size=n)
+    Y_indep = Z @ [0.5, 0.5] + rng.normal(size=n)
+    Y_dep = Z @ [0.5, 0.5] + 0.8 * X + rng.normal(size=n)
+    df_indep = pd.DataFrame({"X": X, "Y": Y_indep, "Z1": Z[:, 0], "Z2": Z[:, 1]})
+    df_dep = pd.DataFrame({"X": X, "Y": Y_dep, "Z1": Z[:, 0], "Z2": Z[:, 1]})
+
+    test_indep = PillaiTrace(data=df_indep, estimator=LinearRegression())
+    result_indep = test_indep("X", "Y", ["Z1", "Z2"])
+    assert isinstance(result_indep, (bool, np.bool_))
+    assert test_indep.p_value_ > 0.05
+
+    test_dep = PillaiTrace(data=df_dep, estimator=LinearRegression())
+    result_dep = test_dep("X", "Y", ["Z1", "Z2"])
+    assert isinstance(result_dep, (bool, np.bool_))
+    assert test_dep.p_value_ < 0.05
+
+
+def test_pillai_linear_regression_no_predict_proba():
+    rng = np.random.default_rng(0)
+    n = 200
+    Z = rng.normal(size=n)
+    X = pd.Categorical(rng.choice(["a", "b", "c"], size=n))
+    Y = rng.normal(size=n)
+    df = pd.DataFrame({"X": X, "Y": Y, "Z": Z})
+
+    test = PillaiTrace(data=df, estimator=LinearRegression())
+    with pytest.raises(ValueError, match="predict_proba"):
+        test("X", "Y", ["Z"])
