@@ -41,7 +41,7 @@ def pillai_data():
         bins=4,
         ordered=False,
         labels=["z21", "z22", "z23", "z24"],
-    ).cat.codes
+    )
 
     df_indep_cat_cont = df_indep_cont_cont.copy()
     df_indep_cat_cont.X = pd.cut(
@@ -49,7 +49,7 @@ def pillai_data():
         bins=4,
         ordered=False,
         labels=["x1", "x2", "x3", "x4"],
-    ).cat.codes
+    )
 
     df_indep_cat_cat = df_indep_cont_cont.copy()
     df_indep_cat_cat.X = pd.cut(
@@ -57,16 +57,16 @@ def pillai_data():
         bins=4,
         ordered=False,
         labels=["x1", "x2", "x3", "x4"],
-    ).cat.codes
+    )
     df_indep_cat_cat.Y = pd.cut(
         df_indep_cat_cat.Y,
         bins=4,
         ordered=False,
         labels=["y1", "y2", "y3", "y4"],
-    ).cat.codes
+    )
 
     df_indep_ord_cont = df_indep_cont_cont.copy()
-    df_indep_ord_cont.X = pd.cut(df_indep_ord_cont.X, bins=4).cat.codes
+    df_indep_ord_cont.X = pd.cut(df_indep_ord_cont.X, bins=4)
 
     model_dep = LinearGaussianBayesianNetwork(
         [
@@ -89,7 +89,7 @@ def pillai_data():
         bins=4,
         ordered=False,
         labels=["z21", "z22", "z23", "z24"],
-    ).cat.codes
+    )
 
     df_dep_cat_cont = df_dep_cont_cont.copy()
     df_dep_cat_cont.X = pd.cut(
@@ -97,7 +97,7 @@ def pillai_data():
         bins=4,
         ordered=False,
         labels=["x1", "x2", "x3", "x4"],
-    ).cat.codes
+    )
 
     df_dep_cat_cat = df_dep_cont_cont.copy()
     df_dep_cat_cat.X = pd.cut(
@@ -105,16 +105,16 @@ def pillai_data():
         bins=4,
         ordered=False,
         labels=["x1", "x2", "x3", "x4"],
-    ).cat.codes
+    )
     df_dep_cat_cat.Y = pd.cut(
         df_dep_cat_cat.Y,
         bins=4,
         ordered=False,
         labels=["y1", "y2", "y3", "y4"],
-    ).cat.codes
+    )
 
     df_dep_ord_cont = df_dep_cont_cont.copy()
-    df_dep_ord_cont.X = pd.cut(df_dep_ord_cont.X, bins=4).cat.codes
+    df_dep_ord_cont.X = pd.cut(df_dep_ord_cont.X, bins=4)
 
     return {
         "indep": [df_indep, df_indep_cont_cont, df_indep_cat_cont, df_indep_cat_cat, df_indep_ord_cont],
@@ -124,7 +124,7 @@ def pillai_data():
 
 @skip_gh_actions
 def test_pillai_no_cond(pillai_data):
-    expected_coefs = [0.1572, 0.1572, 0.1517, 0.1212, 0.1517]
+    expected_coefs = [0.1572, 0.1572, 0.1523, 0.1468, 0.1523]
     expected_pvalues = [0.0000, 0.0000, 0.0000, 0.0000, 0.0000]
 
     computed_coefs = []
@@ -141,8 +141,8 @@ def test_pillai_no_cond(pillai_data):
 
 @skip_gh_actions
 def test_pillai_indep(pillai_data):
-    expected_coefs = [0.0016, 0.0001, 0.0004, 0.0003, 0.0004]
-    expected_pvalues = [0.2125, 0.7537, 0.5118, 0.5879, 0.5118]
+    expected_coefs = [0.0016, 0.0007, 0.0020, 0.0137, 0.0020]
+    expected_pvalues = [0.2125, 0.4154, 0.5741, 0.1333, 0.5741]
 
     computed_coefs = []
     computed_pvalues = []
@@ -158,7 +158,7 @@ def test_pillai_indep(pillai_data):
 
 @skip_gh_actions
 def test_pillai_dependent(pillai_data):
-    expected_coefs = [0.1700, 0.2187, 0.1649, 0.1317, 0.1649]
+    expected_coefs = [0.1700, 0.2159, 0.1717, 0.2203, 0.1717]
     expected_pvalues = [0.0000, 0.0000, 0.0000, 0.0000, 0.0000]
 
     computed_coefs = []
@@ -206,6 +206,39 @@ def test_pillai_tests_approx(pillai_data):
 
     assert np.all(np.array(computed_coefs) >= 0.05)
     assert np.all(np.array(computed_pvalues) <= 0.05)
+
+
+def test_pillai_approx_discrete():
+    # Tests approximate behavior with actual categorical variables (string labels) so that
+    # the categorical residual path in get_residuals is exercised on GitHub CI.
+    rng = np.random.default_rng(0)
+    n = 1000
+    Z = rng.normal(size=n)
+    X_cont = Z * 0.5 + rng.normal(size=n)
+    Y_cont_indep = Z * 0.5 + rng.normal(size=n)
+    Y_cont_dep = Z * 0.5 + X_cont * 1.0 + rng.normal(size=n)
+
+    X_cat = pd.cut(X_cont, bins=4, labels=["a", "b", "c", "d"])
+    Y_cat_indep = pd.cut(Y_cont_indep, bins=4, labels=["p", "q", "r", "s"])
+    Y_cat_dep = pd.cut(Y_cont_dep, bins=4, labels=["p", "q", "r", "s"])
+
+    # cat-cont: categorical X, continuous Y
+    test = PillaiTrace(data=pd.DataFrame({"X": X_cat, "Y": Y_cont_indep, "Z": Z}))
+    test("X", "Y", ["Z"])
+    assert test.p_value_ > 0.05
+
+    test = PillaiTrace(data=pd.DataFrame({"X": X_cat, "Y": Y_cont_dep, "Z": Z}))
+    test("X", "Y", ["Z"])
+    assert test.p_value_ < 0.05
+
+    # cat-cat: both X and Y categorical
+    test = PillaiTrace(data=pd.DataFrame({"X": X_cat, "Y": Y_cat_indep, "Z": Z}))
+    test("X", "Y", ["Z"])
+    assert test.p_value_ > 0.05
+
+    test = PillaiTrace(data=pd.DataFrame({"X": X_cat, "Y": Y_cat_dep, "Z": Z}))
+    test("X", "Y", ["Z"])
+    assert test.p_value_ < 0.05
 
 
 def test_pillai_linear_regression_estimator():
