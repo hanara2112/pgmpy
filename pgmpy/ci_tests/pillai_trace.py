@@ -1,16 +1,14 @@
 import numpy as np
 import pandas as pd
 from scipy import stats
-from sklearn.base import clone
 from sklearn.cross_decomposition import CCA
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
 from pgmpy.utils import preprocess_data
 
-from ._base import _BaseCITest
+from ._base import _BaseCITest, _ResidualMixin
 
 
-class PillaiTrace(_BaseCITest):
+class PillaiTrace(_ResidualMixin, _BaseCITest):
     r"""
     Pillai's trace test for conditional independence with mixed data [1].
 
@@ -56,10 +54,6 @@ class PillaiTrace(_BaseCITest):
         ``RandomForestClassifier`` for categorical targets and ``RandomForestRegressor``
         for continuous targets. Conditioning variables are one-hot encoded before fitting.
 
-    seed : int, optional
-        Random seed for the default estimator. Ignored when a custom ``estimator`` is
-        provided.
-
     Attributes
     ----------
     statistic_ : float
@@ -85,38 +79,10 @@ class PillaiTrace(_BaseCITest):
         "requires_data": True,
     }
 
-    def __init__(self, data: pd.DataFrame, estimator=None, seed=None):
+    def __init__(self, data: pd.DataFrame, estimator=None):
         self.data, self.dtypes = preprocess_data(data)
         self.estimator = estimator
-        self.seed = seed
         super().__init__()
-
-    def _fit_predict(self, target_col, Z_data):
-        """Fit an estimator on Z_data to predict target_col, return predictions and category index."""
-        is_cat = self.dtypes[target_col] in ("C", "O")
-        target_data = self.data.loc[:, target_col]
-        cat_index = None
-
-        if self.estimator is not None:
-            model = clone(self.estimator)
-        else:
-            model_cls = RandomForestClassifier if is_cat else RandomForestRegressor
-            model = model_cls(random_state=self.seed)
-
-        if is_cat:
-            if self.estimator is not None and not hasattr(model, "predict_proba"):
-                raise ValueError(
-                    f"The provided estimator ({type(model).__name__}) must have a "
-                    f"`predict_proba` method for discrete variable '{target_col}'."
-                )
-            y_encoded, cat_index = pd.factorize(target_data)
-            model.fit(Z_data, y_encoded)
-            pred = model.predict_proba(Z_data)
-        else:
-            model.fit(Z_data, target_data)
-            pred = model.predict(Z_data)
-
-        return pred, cat_index
 
     def run_test(
         self,
@@ -145,34 +111,16 @@ class PillaiTrace(_BaseCITest):
         p_value : float
             The p-value.
         """
-        # Step 1: Add an intercept column so the estimator always has at least one feature.
-        Z = Z + ["_intercept_Z"]
-        data = self.data.assign(_intercept_Z=np.ones(self.data.shape[0]))
-
-        # Step 2: Prepare Z data using one-hot encoding for categorical variables.
-        Z_data = pd.get_dummies(data.loc[:, Z])
-
-        # Step 3: Get predictions for X and Y given Z.
-        pred_x, x_cat_index = self._fit_predict(X, Z_data)
-        pred_y, y_cat_index = self._fit_predict(Y, Z_data)
-
-        # Step 4: Compute the residuals.
-        def get_residuals(col_name, pred, cat_index):
-            if self.dtypes[col_name] in ("C", "O"):
-                dummies = pd.get_dummies(data.loc[:, col_name]).loc[:, cat_index.categories[cat_index.codes]]
-                return (dummies - pred).iloc[:, :-1]
-            else:
-                return data.loc[:, col_name] - pred
-
-        res_x = get_residuals(X, pred_x, x_cat_index)
-        res_y = get_residuals(Y, pred_y, y_cat_index)
+        # Steps 1: Compute residuals of X and Y given Z.
+        res_x = self.get_residuals(X, Z)
+        res_y = self.get_residuals(Y, Z)
 
         if isinstance(res_x, pd.Series):
             res_x = res_x.to_frame()
         if isinstance(res_y, pd.Series):
             res_y = res_y.to_frame()
 
-        # Step 5: Compute Pillai's trace via CCA.
+        # Step 2: Compute Pillai's trace test statistic via CCA.
         n_components = min(res_x.shape[1], res_y.shape[1])
         cca = CCA(scale=False, n_components=n_components)
         res_x_c, res_y_c = cca.fit_transform(res_x, res_y)
@@ -183,10 +131,10 @@ class PillaiTrace(_BaseCITest):
 
         coef = (np.array(cancor) ** 2).sum()
 
-        # Step 6: Compute p-value using F-approximation.
+        # Step 3: Compute p-value using F-approximation.
         s = min(res_x.shape[1], res_y.shape[1])
         df1 = res_x.shape[1] * res_y.shape[1]
-        df2 = s * (data.shape[0] - 1 + s - res_x.shape[1] - res_y.shape[1])
+        df2 = s * (self.data.shape[0] - 1 + s - res_x.shape[1] - res_y.shape[1])
         f_stat = (coef / df1) * (df2 / (s - coef))
         p_value = 1 - stats.f.cdf(f_stat, df1, df2)
 

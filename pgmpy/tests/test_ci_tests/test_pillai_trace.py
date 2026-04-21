@@ -3,20 +3,14 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
-from skbase.utils.dependencies import _check_soft_dependencies
 
 from pgmpy.ci_tests import PillaiTrace
 from pgmpy.factors.continuous import LinearGaussianCPD
 from pgmpy.models import LinearGaussianBayesianNetwork
 
-skip_ci = pytest.mark.skipif(
+skip_gh_actions = pytest.mark.skipif(
     os.getenv("GITHUB_ACTIONS") == "true",
     reason="Skipping residual tests on GitHub Actions.",
-)
-
-skip_xgb = pytest.mark.skipif(
-    not _check_soft_dependencies("xgboost", severity="none"),
-    reason="requires xgboost",
 )
 
 
@@ -127,57 +121,62 @@ def pillai_data():
     }
 
 
-@skip_xgb
-@skip_ci
+@skip_gh_actions
 def test_pillai_no_cond(pillai_data):
+    expected_coefs = [0.1572, 0.1572, 0.1517, 0.1212, 0.1517]
+    expected_pvalues = [0.0000, 0.0000, 0.0000, 0.0000, 0.0000]
+
     computed_coefs = []
     computed_pvalues = []
     for df in pillai_data["indep"]:
-        test = PillaiTrace(data=df, seed=42)
+        test = PillaiTrace(data=df)
         test("X", "Y", [])
         computed_coefs.append(test.statistic_)
         computed_pvalues.append(test.p_value_)
 
-    assert np.all(np.array(computed_coefs) >= 0.1)
-    assert np.all(np.array(computed_pvalues) <= 0.05)
+    assert np.allclose(computed_coefs, expected_coefs, atol=1e-4)
+    assert np.allclose(computed_pvalues, expected_pvalues, atol=1e-4)
 
 
-@skip_xgb
-@skip_ci
+@skip_gh_actions
 def test_pillai_indep(pillai_data):
+    expected_coefs = [0.0016, 0.0001, 0.0004, 0.0003, 0.0004]
+    expected_pvalues = [0.2125, 0.7537, 0.5118, 0.5879, 0.5118]
+
     computed_coefs = []
     computed_pvalues = []
     for df in pillai_data["indep"]:
-        test = PillaiTrace(data=df, seed=42)
+        test = PillaiTrace(data=df)
         test("X", "Y", ["Z1", "Z2", "Z3"])
         computed_coefs.append(test.statistic_)
         computed_pvalues.append(test.p_value_)
 
-    assert np.all(np.array(computed_coefs) <= 0.1)
-    assert np.all(np.array(computed_pvalues) >= 0.05)
+    assert np.allclose(computed_coefs, expected_coefs, atol=1e-4)
+    assert np.allclose(computed_pvalues, expected_pvalues, atol=1e-4)
 
 
-@skip_xgb
-@skip_ci
+@skip_gh_actions
 def test_pillai_dependent(pillai_data):
+    expected_coefs = [0.1700, 0.2187, 0.1649, 0.1317, 0.1649]
+    expected_pvalues = [0.0000, 0.0000, 0.0000, 0.0000, 0.0000]
+
     computed_coefs = []
     computed_pvalues = []
     for df in pillai_data["dep"]:
-        test = PillaiTrace(data=df, seed=42)
+        test = PillaiTrace(data=df)
         test("X", "Y", ["Z1", "Z2", "Z3"])
         computed_coefs.append(test.statistic_)
         computed_pvalues.append(test.p_value_)
 
-    assert np.all(np.array(computed_coefs) >= 0.09)
-    assert np.all(np.array(computed_pvalues) <= 0.05)
+    assert np.allclose(computed_coefs, expected_coefs, atol=1e-4)
+    assert np.allclose(computed_pvalues, expected_pvalues, atol=1e-4)
 
 
-@skip_xgb
 def test_pillai_tests_approx(pillai_data):
     computed_coefs = []
     computed_pvalues = []
     for df in pillai_data["indep"]:
-        test = PillaiTrace(data=df, seed=42)
+        test = PillaiTrace(data=df)
         test("X", "Y", [])
         computed_coefs.append(test.statistic_)
         computed_pvalues.append(test.p_value_)
@@ -188,7 +187,7 @@ def test_pillai_tests_approx(pillai_data):
     computed_coefs = []
     computed_pvalues = []
     for df in pillai_data["indep"]:
-        test = PillaiTrace(data=df, seed=42)
+        test = PillaiTrace(data=df)
         test("X", "Y", ["Z1", "Z2", "Z3"])
         computed_coefs.append(test.statistic_)
         computed_pvalues.append(test.p_value_)
@@ -199,7 +198,7 @@ def test_pillai_tests_approx(pillai_data):
     computed_coefs = []
     computed_pvalues = []
     for df in pillai_data["dep"]:
-        test = PillaiTrace(data=df, seed=42)
+        test = PillaiTrace(data=df)
         test("X", "Y", ["Z1", "Z2", "Z3"])
         computed_coefs.append(test.statistic_)
         computed_pvalues.append(test.p_value_)
