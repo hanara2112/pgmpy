@@ -4,6 +4,7 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 from scipy import stats
+from skbase.utils.dependencies import _safe_import
 from sklearn.cross_decomposition import CCA
 
 from pgmpy import logger
@@ -633,12 +634,9 @@ def _get_predictions(X, Y, Z, data, **kwargs):
     Helper Strategy: Function to get predictions using XGBoost for `ci_pillai`.
     Not registered directly as a CI test.
     """
-    try:
-        from xgboost import XGBClassifier, XGBRegressor
-    except ImportError as e:
-        raise ImportError(
-            f"{e}. xgboost is required for using pillai_trace test. Please install using: pip install xgboost"
-        ) from None
+    xgboost = _safe_import("xgboost")
+    XGBClassifier = xgboost.XGBClassifier
+    XGBRegressor = xgboost.XGBRegressor
 
     if any(data.loc[:, Z].dtypes == "category"):
         enable_categorical = True
