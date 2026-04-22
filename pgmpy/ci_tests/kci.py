@@ -8,6 +8,7 @@ from .hsic import HSIC
 
 def _gamma_pvalue_from_moments(test_stat: float, mean: float, var: float) -> float:
     """Gamma-approximation p-value from precomputed null moments."""
+    # Guards against degenerate spectra.
     if var <= 0 or mean <= 0:
         return 1.0
 
@@ -18,31 +19,49 @@ def _gamma_pvalue_from_moments(test_stat: float, mean: float, var: float) -> flo
 
 class KCI(HSIC):
     r"""
-    Kernel-based Conditional Independence (KCI) test [1].
+    Kernel-based Conditional Independence (KCI) [1] test for conditional
+    independence of continuous variables.
 
-    Extends :class:`HSIC` to the conditional case :math:`X \perp\!\!\!\perp Y \mid Z`.
-    When ``Z`` is empty the test falls back to HSIC. The conditional statistic is
+    Extends :class:`HSIC` to :math:`X \perp\!\!\!\perp Y \mid Z`; falls back to
+    HSIC when ``Z`` is empty. The conditional statistic is
 
     .. math::
-        T_{CI} = \frac{1}{n}\operatorname{Tr}
-            \bigl(\tilde{K}_{\ddot{X}|Z}\tilde{K}_{Y|Z}\bigr),
+        T_{CI} = \frac{1}{n}\operatorname{Tr}\bigl(\tilde{K}_{\ddot{X}|Z}\tilde{K}_{Y|Z}\bigr),
 
     where :math:`\tilde{K}_{\cdot|Z} = R_Z \tilde{K}_\cdot R_Z` and
-    :math:`R_Z = \varepsilon (K_Z + \varepsilon I)^{-1}`. A Gamma approximation
-    is used for the null distribution.
+    :math:`R_Z = \varepsilon (K_Z + \varepsilon I)^{-1}`. Under the null,
+    :math:`T_{CI}` is a weighted sum of :math:`\chi^2_1` approximated by a
+    moment-matched Gamma with shape :math:`k=\mu^2/\sigma^2` and scale
+    :math:`\theta=\sigma^2/\mu`, where :math:`\mu, \sigma^2` are estimated from
+    the eigenspectrum of the residualized kernels [1].
 
     Parameters
     ----------
     data : pandas.DataFrame
-        Dataset containing variables X, Y, and optionally Z.
-    kernel_X, kernel_Y, kernel_Z : sklearn.gaussian_process.kernels.Kernel or None
-        Kernels for each variable. Default: RBF with bandwidth heuristic.
-    bandwidth : {"empirical", "median"}, default="empirical"
+        The dataset in which to test the independence condition.
+    kernel : sklearn Kernel, tuple of three Kernels, or None
+        Kernel(s) for X, Y, Z; a single object is shared across all three.
+        Default: RBF with bandwidth heuristic.
+    bandwidth : {"heuristic", "median"}, default="heuristic"
         Bandwidth heuristic when kernel is None.
     epsilon : float, default=1e-3
-        Tikhonov regularization added to :math:`K_Z` before inversion to ensure
-        numerical stability of the residualization operator
+        Tikhonov regularization for
         :math:`R_Z = \varepsilon (K_Z + \varepsilon I)^{-1}`.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> from pgmpy.ci_tests import KCI
+    >>> rng = np.random.default_rng(seed=42)
+    >>> data = pd.DataFrame(rng.standard_normal((300, 3)), columns=["X", "Y", "Z"])
+    >>> test = KCI(data=data)
+    >>> test("X", "Y", ["Z"], significance_level=0.05)
+    True
+    >>> round(test.statistic_, 2)
+    95.19
+    >>> round(test.p_value_, 2)
+    0.33
 
     Attributes
     ----------
@@ -53,24 +72,10 @@ class KCI(HSIC):
 
     References
     ----------
-    .. [1] Zhang et al. (2011). Kernel-based Conditional Independence
-        Test and Application in Causal Discovery. UAI 2011.
+    .. [1] Zhang et al. (2011). Kernel-based Conditional Independence Test and Application in
+           Causal Discovery. UAI 2011.
     .. [2] causal-learn: Causal Discovery in Python.
-        https://causal-learn.readthedocs.io/en/latest/
-
-    Examples
-    --------
-    >>> import numpy as np, pandas as pd
-    >>> from pgmpy.ci_tests import KCI
-    >>> rng = np.random.default_rng(seed=42)
-    >>> data = pd.DataFrame(rng.standard_normal((300, 3)), columns=["X", "Y", "Z"])
-    >>> test = KCI(data=data)
-    >>> test("X", "Y", ["Z"], significance_level=0.05)
-    True
-    >>> test.statistic_  # doctest: +SKIP
-    2.66...
-    >>> test.p_value_  # doctest: +SKIP
-    0.55...
+           https://causal-learn.readthedocs.io/en/latest/
     """
 
     _tags = {
@@ -83,18 +88,22 @@ class KCI(HSIC):
     def __init__(
         self,
         data: pd.DataFrame,
-        kernel_X: Kernel | None = None,
-        kernel_Y: Kernel | None = None,
-        kernel_Z: Kernel | None = None,
-        bandwidth: str = "empirical",
+        kernel: Kernel | tuple | None = None,
+        bandwidth: str = "heuristic",
         epsilon: float = 1e-3,
     ):
-        super().__init__(data=data, kernel_X=kernel_X, kernel_Y=kernel_Y, bandwidth=bandwidth)
+        if kernel is None or isinstance(kernel, Kernel):
+            kernel_X = kernel_Y = kernel_Z = kernel
+        else:
+            kernel_X, kernel_Y, kernel_Z = kernel
+        super().__init__(data=data, kernel=(kernel_X, kernel_Y), bandwidth=bandwidth)
         self.kernel_Z = kernel_Z
         self.epsilon = epsilon
 
-    def _empirical_width_kci(self, Z: np.ndarray) -> float:
-        """Piecewise RBF length-scale for the conditional path [2]."""
+    def _length_scale_kci(self, Z: np.ndarray) -> float:
+        """RBF length-scale for KCI (piecewise heuristic [2] or median)."""
+        if self.bandwidth == "median":
+            return self._median_width(Z)
         n = Z.shape[0]
         if n < 200:
             width = 1.2
@@ -104,46 +113,29 @@ class KCI(HSIC):
             width = 0.4
         return width * np.sqrt(Z.shape[1])
 
-    def _get_length_scale_kci(self, Z: np.ndarray) -> float:
-        if self.bandwidth == "median":
-            return self._median_width(Z)
-        return self._empirical_width_kci(Z)
-
     def _get_uu_prod(self, KxR: np.ndarray, KyR: np.ndarray, thresh: float = 1e-5) -> np.ndarray:
-        """Truncated eigendecomposition product for null-moment estimation."""
+        """Gram of the product spectrum of the residualized kernels; source of the null moments."""
+        n = KxR.shape[0]
         wx, vx = np.linalg.eigh(0.5 * (KxR + KxR.T))
         wy, vy = np.linalg.eigh(0.5 * (KyR + KyR.T))
 
-        wx, vx = wx[np.argsort(-wx)], vx[:, np.argsort(-wx)]
-        wy, vy = wy[np.argsort(-wy)], vy[:, np.argsort(-wy)]
+        mask_x = wx > np.max(wx) * thresh
+        mask_y = wy > np.max(wy) * thresh
+        vx = vx[:, mask_x] * np.sqrt(wx[mask_x])
+        vy = vy[:, mask_y] * np.sqrt(wy[mask_y])
 
-        vx = vx[:, wx > np.max(wx) * thresh]
-        wx = wx[wx > np.max(wx) * thresh]
-        vy = vy[:, wy > np.max(wy) * thresh]
-        wy = wy[wy > np.max(wy) * thresh]
-
-        vx = vx @ np.diag(np.sqrt(wx))
-        vy = vy @ np.diag(np.sqrt(wy))
-
-        n = KxR.shape[0]
-        num_eigx, num_eigy = vx.shape[1], vy.shape[1]
-        size_u = num_eigx * num_eigy
-        uu = np.zeros((n, size_u))
-        for i in range(num_eigx):
-            for j in range(num_eigy):
-                uu[:, i * num_eigy + j] = vx[:, i] * vy[:, j]
-
-        return uu @ uu.T if size_u > n else uu.T @ uu
+        uu = (vx[:, :, None] * vy[:, None, :]).reshape(n, -1)
+        return uu @ uu.T if uu.shape[1] > n else uu.T @ uu
 
     def _conditional_test(self, x: np.ndarray, y: np.ndarray, z: np.ndarray):
         n = x.shape[0]
-        ls = self._get_length_scale_kci(z)
+        ls = self._length_scale_kci(z)
 
         kernel_x = self.kernel_X if self.kernel_X is not None else RBF(length_scale=ls)
         kernel_y = self.kernel_Y if self.kernel_Y is not None else RBF(length_scale=ls)
         kernel_z = self.kernel_Z if self.kernel_Z is not None else RBF(length_scale=ls)
 
-        # Augment X with half-weighted Z, following the causal-learn reference [2].
+        # Augment X with 0.5-scaled Z (causal-learn default [2]).
         Kx = self._center_kernel(kernel_x(np.hstack([x, 0.5 * z])))
         Ky = self._center_kernel(kernel_y(y))
         Kz = self._center_kernel(kernel_z(z))
@@ -166,7 +158,7 @@ class KCI(HSIC):
 
         Sets ``self.statistic_`` and ``self.p_value_``.
         """
-        if len(Z) == 0:
+        if not Z:
             return super().run_test(X, Y, Z)
 
         x = self.data[X].to_numpy(dtype=float).reshape(-1, 1)
