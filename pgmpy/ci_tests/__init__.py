@@ -3,6 +3,8 @@ from .chi_square import ChiSquare
 from .fisher_z import FisherZ
 from .g_sq import GSq
 from .gcm import GCM
+from .generalized_cov import GeneralizedCov
+from .hotelling_lawley import HotellingLawley
 from .hsic import HSIC
 from .independence_match import IndependenceMatch
 from .kci import KCI
@@ -12,6 +14,8 @@ from .pearsonr import Pearsonr
 from .pearsonr_equivalence import PearsonrEquivalence
 from .pillai_trace import PillaiTrace
 from .power_divergence import PowerDivergence
+from .roys_largest_root import RoysLargestRoot
+from .wilks_lambda import WilksLambda
 
 __all__ = [
     "_BaseCITest",
@@ -21,6 +25,8 @@ __all__ = [
     "GSq",
     "GCM",
     "HSIC",
+    "GeneralizedCov",
+    "HotellingLawley",
     "IndependenceMatch",
     "KCI",
     "LogLikelihood",
@@ -29,4 +35,6 @@ __all__ = [
     "PearsonrEquivalence",
     "PillaiTrace",
     "PowerDivergence",
+    "RoysLargestRoot",
+    "WilksLambda",
 ]
