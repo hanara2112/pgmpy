@@ -4,7 +4,7 @@ from scipy import stats
 from scipy.spatial.distance import pdist
 from sklearn.gaussian_process.kernels import RBF, Kernel
 
-from ._base import _BaseCITest
+from ._base import _BaseCITest, _CITestResult
 
 
 class HSIC(_BaseCITest):
@@ -23,7 +23,8 @@ class HSIC(_BaseCITest):
     :math:`\chi^2_1` variables. The p-value is computed either from a
     moment-matched Gamma approximation with shape :math:`k=\mu^2/\sigma^2`
     and scale :math:`\theta=\sigma^2/\mu` (closed-form null moments from [2]),
-    or from a permutation test on Y [1].
+    or from a permutation test on Y [1]. Returns ``p_value_ = 1.0`` if
+    ``n < 6`` (variance estimator is undefined).
 
     Parameters
     ----------
@@ -35,10 +36,9 @@ class HSIC(_BaseCITest):
     bandwidth : {"heuristic", "median"}, default="heuristic"
         Bandwidth heuristic when kernel is None.
     null_dist : {"gamma", "permutation"}, default="gamma"
-        Null approximation. ``"gamma"`` [2] is 10-100x faster than
-        ``"permutation"`` [1] and agrees within ~0.02; prefer
-        ``"permutation"`` for small n or non-RBF kernels.
-    n_permutations : int, default=500
+        Null approximation. ``"gamma"`` [2] is faster but assumes RBF-like
+        kernels; use ``"permutation"`` [1] for non-RBF kernels.
+    n_permutations : int, default=100
         Number of permutations (used only when ``null_dist="permutation"``).
     random_state : int, np.random.Generator, or None, default=None
         Seed for permutation reproducibility.
@@ -62,6 +62,8 @@ class HSIC(_BaseCITest):
         The HSIC V-statistic. Set after calling the test.
     p_value_ : float
         The p-value for the test. Set after calling the test.
+    effect_size_ : None
+        Not defined for HSIC.
 
     References
     ----------
@@ -84,8 +86,9 @@ class HSIC(_BaseCITest):
         kernel: Kernel | tuple | None = None,
         bandwidth: str = "heuristic",
         null_dist: str = "gamma",
-        n_permutations: int = 500,
+        n_permutations: int = 100,
         random_state: int | np.random.Generator | None = None,
+        use_cache: bool = True,
     ):
         if bandwidth not in ("heuristic", "median"):
             raise ValueError(f"bandwidth must be 'heuristic' or 'median', got {bandwidth!r}")
@@ -94,16 +97,19 @@ class HSIC(_BaseCITest):
         if n_permutations < 1:
             raise ValueError(f"n_permutations must be >= 1, got {n_permutations!r}")
 
-        self.data = data
         if kernel is None or isinstance(kernel, Kernel):
-            self.kernel_X = self.kernel_Y = kernel
+            self.kernel_X_ = self.kernel_Y_ = kernel
+        elif isinstance(kernel, tuple) and len(kernel) == 2:
+            self.kernel_X_, self.kernel_Y_ = kernel
         else:
-            self.kernel_X, self.kernel_Y = kernel
+            raise ValueError("kernel must be a sklearn Kernel, a tuple of two Kernels, or None")
+
+        self.data = data
         self.bandwidth = bandwidth
         self.null_dist = null_dist
         self.n_permutations = n_permutations
         self.random_state = random_state
-        super().__init__()
+        super().__init__(use_cache=use_cache)
 
     @staticmethod
     def _median_width(X: np.ndarray) -> float:
@@ -112,7 +118,7 @@ class HSIC(_BaseCITest):
         return np.sqrt(2.0) * med if med > 0 else 1.0
 
     def _length_scale(self, X: np.ndarray) -> float:
-        """RBF length-scale from ``bandwidth`` (piecewise heuristic or median)."""
+        """RBF length-scale: median heuristic, or piecewise width by sample size."""
         if self.bandwidth == "median":
             return self._median_width(X)
         n = X.shape[0]
@@ -121,30 +127,26 @@ class HSIC(_BaseCITest):
 
     @staticmethod
     def _center_kernel(K: np.ndarray) -> np.ndarray:
-        """Double-centre a kernel matrix."""
+        """Double-center a kernel matrix."""
         col_mean = K.mean(axis=0)
         return K - col_mean[None, :] - col_mean[:, None] + col_mean.mean()
 
     def _hsic_gamma_pvalue(self, test_stat, K, L, Kc, Lc):
         """Gamma p-value using exact null moments (Proposition 6(i) of [2])."""
         n = K.shape[0]
-        # For n < 6 the variance formula breaks or is zero; return p = 1.0.
         if n < 6:
             return 1.0
 
-        # Null variance for T/n.
         M_sq = (Kc * Lc / 6.0) ** 2
         off_diag_sq_sum = M_sq.sum() - np.trace(M_sq)
         var_hsic = off_diag_sq_sum / (n * (n - 1))
         moment_factor = 72.0 * (n - 4) * (n - 5) / (n * (n - 1) * (n - 2) * (n - 3))
         var_hsic *= moment_factor
 
-        # Null mean for T/n from off-diagonal kernel means.
         mu_x = (K.sum() - np.trace(K)) / (n * (n - 1))
         mu_y = (L.sum() - np.trace(L)) / (n * (n - 1))
         mean_hsic = (1.0 + mu_x * mu_y - mu_x - mu_y) / n
 
-        # Guards against degenerate inputs (see PR discussion).
         if var_hsic <= 0 or mean_hsic <= 0:
             return 1.0
 
@@ -152,42 +154,39 @@ class HSIC(_BaseCITest):
         beta = var_hsic * n / mean_hsic
         return 1.0 - stats.gamma.cdf(test_stat / n, a=alpha, scale=beta)
 
-    def _permutation_pvalue(self, test_stat, Kxc, y, kernel_y):
-        """Empirical p-value by permuting Y (Section 5.1 of [1])."""
-        rng = np.random.default_rng(self.random_state)
-        n = y.shape[0]
-        null_stats = np.empty(self.n_permutations)
-        for i in range(self.n_permutations):
-            Lyc = self._center_kernel(kernel_y(y[rng.permutation(n)]))
-            null_stats[i] = np.sum(Kxc * Lyc)
-        return (1 + np.sum(null_stats >= test_stat)) / (1 + self.n_permutations)
-
-    def run_test(self, X: str, Y: str, Z: list):
+    def _compute_result(self, X: str, Y: str, Z: list):
         r"""
-        Test :math:`X \perp Y`. Z must be empty; use KCI for conditional tests.
+        Compute HSIC statistic and p-value for :math:`X \perp Y`.
 
-        Returns (statistic, p_value) and sets self.statistic_, self.p_value_.
+        Z must be empty; use :class:`KCI` for conditional tests.
         """
         if Z:
-            raise ValueError("HSIC does not support conditioning variables. Use KCI instead.")
+            raise ValueError("HSIC does not support conditioning variables; use KCI.")
 
         x = self.data[X].to_numpy(dtype=float).reshape(-1, 1)
         y = self.data[Y].to_numpy(dtype=float).reshape(-1, 1)
-        x = np.nan_to_num(stats.zscore(x, ddof=1, axis=0))
-        y = np.nan_to_num(stats.zscore(y, ddof=1, axis=0))
 
-        kernel_x = self.kernel_X if self.kernel_X is not None else RBF(length_scale=self._length_scale(x))
-        kernel_y = self.kernel_Y if self.kernel_Y is not None else RBF(length_scale=self._length_scale(y))
+        x_std, y_std = x.std(ddof=1), y.std(ddof=1)
+        x = (x - x.mean()) / x_std if x_std > 0 else np.zeros_like(x)
+        y = (y - y.mean()) / y_std if y_std > 0 else np.zeros_like(y)
+
+        kernel_x = self.kernel_X_ if self.kernel_X_ is not None else RBF(length_scale=self._length_scale(x))
+        kernel_y = self.kernel_Y_ if self.kernel_Y_ is not None else RBF(length_scale=self._length_scale(y))
 
         Kx, Ky = kernel_x(x), kernel_y(y)
         Kxc, Kyc = self._center_kernel(Kx), self._center_kernel(Ky)
         test_stat = np.sum(Kxc * Kyc)
 
         if self.null_dist == "permutation":
-            p_value = self._permutation_pvalue(test_stat, Kxc, y, kernel_y)
+            # Permutation commutes with centering, so reindex Kyc instead of re-centering.
+            rng = np.random.default_rng(self.random_state)
+            n = y.shape[0]
+            null_stats = np.empty(self.n_permutations)
+            for i in range(self.n_permutations):
+                perm = rng.permutation(n)
+                null_stats[i] = np.sum(Kxc * Kyc[perm][:, perm])
+            p_value = (1 + np.sum(null_stats >= test_stat)) / (1 + self.n_permutations)
         else:
             p_value = self._hsic_gamma_pvalue(test_stat, Kx, Ky, Kxc, Kyc)
 
-        self.statistic_ = float(test_stat)
-        self.p_value_ = float(p_value)
-        return self.statistic_, self.p_value_
+        return _CITestResult(statistic=float(test_stat), p_value=float(p_value), effect_size=None)

@@ -3,12 +3,12 @@ import pandas as pd
 from scipy import stats
 from sklearn.gaussian_process.kernels import RBF, Kernel
 
+from ._base import _CITestResult
 from .hsic import HSIC
 
 
 def _gamma_pvalue_from_moments(test_stat: float, mean: float, var: float) -> float:
     """Gamma-approximation p-value from precomputed null moments."""
-    # Guards against degenerate spectra.
     if var <= 0 or mean <= 0:
         return 1.0
 
@@ -69,6 +69,8 @@ class KCI(HSIC):
         The KCI test statistic. Set after calling the test.
     p_value_ : float
         The p-value for the test. Set after calling the test.
+    effect_size_ : None
+        Not defined for KCI.
 
     References
     ----------
@@ -91,30 +93,29 @@ class KCI(HSIC):
         kernel: Kernel | tuple | None = None,
         bandwidth: str = "heuristic",
         epsilon: float = 1e-3,
+        use_cache: bool = True,
     ):
         if kernel is None or isinstance(kernel, Kernel):
             kernel_X = kernel_Y = kernel_Z = kernel
-        else:
+        elif isinstance(kernel, tuple) and len(kernel) == 3:
             kernel_X, kernel_Y, kernel_Z = kernel
-        super().__init__(data=data, kernel=(kernel_X, kernel_Y), bandwidth=bandwidth)
-        self.kernel_Z = kernel_Z
+        else:
+            raise ValueError("kernel must be a sklearn Kernel, a tuple of three Kernels, or None")
+
+        super().__init__(data=data, kernel=(kernel_X, kernel_Y), bandwidth=bandwidth, use_cache=use_cache)
+        self.kernel_Z_ = kernel_Z
         self.epsilon = epsilon
 
     def _length_scale_kci(self, Z: np.ndarray) -> float:
-        """RBF length-scale for KCI (piecewise heuristic [2] or median)."""
+        """RBF length-scale for KCI: median heuristic, or piecewise width by sample size [2]."""
         if self.bandwidth == "median":
             return self._median_width(Z)
         n = Z.shape[0]
-        if n < 200:
-            width = 1.2
-        elif n < 1200:
-            width = 0.7
-        else:
-            width = 0.4
+        width = 1.2 if n < 200 else (0.7 if n < 1200 else 0.4)
         return width * np.sqrt(Z.shape[1])
 
     def _get_uu_prod(self, KxR: np.ndarray, KyR: np.ndarray, thresh: float = 1e-5) -> np.ndarray:
-        """Gram of the product spectrum of the residualized kernels; source of the null moments."""
+        """Gram matrix of the product spectrum; used to estimate null moments."""
         n = KxR.shape[0]
         wx, vx = np.linalg.eigh(0.5 * (KxR + KxR.T))
         wy, vy = np.linalg.eigh(0.5 * (KyR + KyR.T))
@@ -131,9 +132,9 @@ class KCI(HSIC):
         n = x.shape[0]
         ls = self._length_scale_kci(z)
 
-        kernel_x = self.kernel_X if self.kernel_X is not None else RBF(length_scale=ls)
-        kernel_y = self.kernel_Y if self.kernel_Y is not None else RBF(length_scale=ls)
-        kernel_z = self.kernel_Z if self.kernel_Z is not None else RBF(length_scale=ls)
+        kernel_x = self.kernel_X_ if self.kernel_X_ is not None else RBF(length_scale=ls)
+        kernel_y = self.kernel_Y_ if self.kernel_Y_ is not None else RBF(length_scale=ls)
+        kernel_z = self.kernel_Z_ if self.kernel_Z_ is not None else RBF(length_scale=ls)
 
         # Augment X with 0.5-scaled Z (causal-learn default [2]).
         Kx = self._center_kernel(kernel_x(np.hstack([x, 0.5 * z])))
@@ -152,22 +153,21 @@ class KCI(HSIC):
 
         return test_stat, _gamma_pvalue_from_moments(test_stat, mean, var)
 
-    def run_test(self, X: str, Y: str, Z: list):
-        """
-        Compute KCI statistic and p-value.
-
-        Sets ``self.statistic_`` and ``self.p_value_``.
-        """
+    def _compute_result(self, X: str, Y: str, Z: list):
+        """Compute KCI statistic and p-value; falls back to HSIC when Z is empty."""
         if not Z:
-            return super().run_test(X, Y, Z)
+            return super()._compute_result(X, Y, Z)
 
         x = self.data[X].to_numpy(dtype=float).reshape(-1, 1)
         y = self.data[Y].to_numpy(dtype=float).reshape(-1, 1)
         z = self.data[Z].to_numpy(dtype=float)
 
-        x = np.nan_to_num(stats.zscore(x, ddof=1, axis=0))
-        y = np.nan_to_num(stats.zscore(y, ddof=1, axis=0))
-        z = np.nan_to_num(stats.zscore(z, ddof=1, axis=0))
+        x_std, y_std = x.std(ddof=1), y.std(ddof=1)
+        x = (x - x.mean()) / x_std if x_std > 0 else np.zeros_like(x)
+        y = (y - y.mean()) / y_std if y_std > 0 else np.zeros_like(y)
 
-        self.statistic_, self.p_value_ = self._conditional_test(x, y, z)
-        return self.statistic_, self.p_value_
+        z_std = z.std(ddof=1, axis=0)
+        z = np.where(z_std > 0, (z - z.mean(axis=0)) / z_std, 0.0)
+
+        test_stat, p_value = self._conditional_test(x, y, z)
+        return _CITestResult(statistic=test_stat, p_value=p_value, effect_size=None)
