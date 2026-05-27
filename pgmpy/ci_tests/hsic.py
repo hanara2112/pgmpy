@@ -34,7 +34,12 @@ class HSIC(_BaseCITest):
         Kernel(s) for X and Y; a single object is shared by both. Default: RBF
         with bandwidth heuristic.
     bandwidth : {"heuristic", "median"}, default="heuristic"
-        Bandwidth heuristic when kernel is None.
+        RBF length-scale rule when ``kernel`` is None.
+        ``"heuristic"`` uses a piecewise width by sample size
+        (``0.8`` if ``n < 200``, ``0.5`` if ``n < 1200``, else ``0.3``),
+        scaled by ``1 / sqrt(d)`` for ``d``-dimensional inputs.
+        ``"median"`` uses ``sqrt(2) * median`` of pairwise Euclidean
+        distances (falling back to ``1.0`` if the median is zero).
     null_dist : {"gamma", "permutation"}, default="gamma"
         Null approximation. ``"gamma"`` [2] is faster but assumes RBF-like
         kernels; use ``"permutation"`` [1] for non-RBF kernels.
@@ -78,6 +83,7 @@ class HSIC(_BaseCITest):
         "data_types": ("continuous",),
         "default_for": None,
         "requires_data": True,
+        "is_symmetric": True,
     }
 
     def __init__(

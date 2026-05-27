@@ -85,6 +85,7 @@ class KCI(HSIC):
         "data_types": ("continuous",),
         "default_for": None,
         "requires_data": True,
+        "is_symmetric": True,
     }
 
     def __init__(
