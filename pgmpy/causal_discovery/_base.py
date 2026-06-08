@@ -7,6 +7,11 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from sklearn.base import BaseEstimator
+from sklearn.metrics import (
+    adjusted_mutual_info_score,
+    mutual_info_score,
+    normalized_mutual_info_score,
+)
 from sklearn.utils.validation import check_is_fitted, validate_data
 from tqdm.auto import tqdm
 
@@ -18,7 +23,7 @@ from pgmpy.metrics import get_metrics
 from pgmpy.structure_score import BaseStructureScore
 
 
-class _BaseCausalDiscovery(BaseEstimator):
+class BaseCausalDiscovery(BaseEstimator):
     """
     Base class for all causal discovery estimators in pgmpy.
 
@@ -116,7 +121,8 @@ class _BaseCausalDiscovery(BaseEstimator):
         >>> from pgmpy.causal_discovery import PC
         >>> from pgmpy.metrics import get_metrics
         >>> from pgmpy.datasets import load_dataset
-        >>> data = load_dataset("lead")
+        >>> dataset = load_dataset("lead")
+        >>> data = dataset.data
         >>> dag = PC(return_type="dag").fit(data)
         >>> score = dag.score(X=data, metric="correlation_score")
         """
@@ -297,10 +303,8 @@ class _ConstraintMixin:
 
         References
         ----------
-        [1] Neapolitan, Learning Bayesian Networks, Section 10.1.2, Algorithm 10.2 (page 550)
-            http://www.cs.technion.ac.il/~dang/books/Learning%20Bayesian%20Networks(Neapolitan,%20Richard).pdf
-        [2] Koller & Friedman, Probabilistic Graphical Models - Principles and Techniques, 2009
-            Section 3.4.2.1 (page 85), Algorithm 3.3
+        - :cite:p:`neapolitan_2009` (Section 10.1.2, Algorithm 10.2, page 550).
+        - :cite:p:`koller_friedman_2009` (Section 3.4.2.1, page 85, Algorithm 3.3).
         """
         # Initialize initial values and structures.
         lim_neighbors = 0
@@ -520,57 +524,176 @@ class _ScoreMixin:
         edges or to force them to be present in the model, respectively.
         """
 
+        # Step 0: Pre-compute structures that are constant
         tabu_list = set(tabu_list)
+        descendants = {v: nx.descendants(model, v) for v in model.nodes()}
+        edges = list(model.edges())
+        edge_set = set(edges)
+        reverse_edge_set = {(Y, X) for (X, Y) in edges}
 
-        # Step 1: Get all legal operations for adding edges.
-        potential_new_edges = (
-            set(permutations(self.variables_, 2)) - set(model.edges()) - {(Y, X) for (X, Y) in model.edges()}
-        )
+        parents_cache = {v: tuple(model.get_parents(v)) for v in model.nodes()}
+        current_score = {v: scoring_method.local_score(v, parents_cache[v]) for v in model.nodes()}
+
+        prior_add = scoring_method.structure_prior_ratio("+")
+        prior_remove = scoring_method.structure_prior_ratio("-")
+        prior_flip = scoring_method.structure_prior_ratio("flip")
+
+        # Step 1: Get all legal operations for adding edges. Sort the iteration order for reproducible runs.
+        potential_new_edges = sorted(set(permutations(self.variables_, 2)) - edge_set - reverse_edge_set)
 
         for X, Y in potential_new_edges:
-            # Check if adding (X, Y) will create a cycle.
-            if not nx.has_path(model, Y, X):
-                operation = ("+", (X, Y))
-                if (operation not in tabu_list) and ((X, Y) not in forbidden_edges):
-                    old_parents = tuple(model.get_parents(Y))
-                    new_parents = old_parents + (X,)
-                    if len(new_parents) <= max_indegree:
-                        score_delta = scoring_method.local_score(Y, new_parents) - scoring_method.local_score(
-                            Y, old_parents
-                        )
-                        score_delta += scoring_method.structure_prior_ratio("+")
-                        yield (operation, score_delta)
+            # Adding X->Y creates a cycle iff Y already reaches X.
+            if X in descendants[Y]:
+                continue
+            operation = ("+", (X, Y))
+            if (operation not in tabu_list) and ((X, Y) not in forbidden_edges):
+                old_parents = parents_cache[Y]
+                new_parents = old_parents + (X,)
+                if len(new_parents) <= max_indegree:
+                    score_delta = scoring_method.local_score(Y, new_parents) - current_score[Y] + prior_add
+                    yield (operation, score_delta)
 
         # Step 2: Get all legal operations for removing edges
-        for X, Y in model.edges():
+        for X, Y in edges:
             operation = ("-", (X, Y))
             if (operation not in tabu_list) and ((X, Y) not in required_edges):
-                old_parents = tuple(model.get_parents(Y))
+                old_parents = parents_cache[Y]
                 new_parents = tuple(var for var in old_parents if var != X)
-                score_delta = scoring_method.local_score(Y, new_parents) - scoring_method.local_score(Y, old_parents)
-                score_delta += scoring_method.structure_prior_ratio("-")
+                score_delta = scoring_method.local_score(Y, new_parents) - current_score[Y] + prior_remove
                 yield (operation, score_delta)
 
         # Step 3: Get all legal operations for flipping edges
-        for X, Y in model.edges():
-            # Check if flipping creates any cycles
-            if not any(map(lambda path: len(path) > 2, nx.all_simple_paths(model, X, Y))):
-                operation = ("flip", (X, Y))
-                if (
-                    ((operation not in tabu_list) and ("flip", (Y, X)) not in tabu_list)
-                    and ((X, Y) not in required_edges)
-                    and ((Y, X) not in forbidden_edges)
-                ):
-                    old_X_parents = tuple(model.get_parents(X))
-                    old_Y_parents = tuple(model.get_parents(Y))
-                    new_X_parents = old_X_parents + (Y,)
-                    new_Y_parents = tuple(var for var in old_Y_parents if var != X)
-                    if len(new_X_parents) <= max_indegree:
-                        score_delta = (
-                            scoring_method.local_score(X, new_X_parents)
-                            + scoring_method.local_score(Y, new_Y_parents)
-                            - scoring_method.local_score(X, old_X_parents)
-                            - scoring_method.local_score(Y, old_Y_parents)
-                        )
-                        score_delta += scoring_method.structure_prior_ratio("flip")
-                        yield (operation, score_delta)
+        for X, Y in edges:
+            # Flipping X->Y to Y->X creates a cycle iff some other child of X
+            # already reaches Y (a path X -> C -> ... -> Y with C != Y).
+            if any(Y in descendants[c] for c in model.successors(X) if c != Y):
+                continue
+            operation = ("flip", (X, Y))
+            if (
+                ((operation not in tabu_list) and ("flip", (Y, X)) not in tabu_list)
+                and ((X, Y) not in required_edges)
+                and ((Y, X) not in forbidden_edges)
+            ):
+                new_X_parents = parents_cache[X] + (Y,)
+                new_Y_parents = tuple(var for var in parents_cache[Y] if var != X)
+                if len(new_X_parents) <= max_indegree:
+                    score_delta = (
+                        scoring_method.local_score(X, new_X_parents)
+                        + scoring_method.local_score(Y, new_Y_parents)
+                        - current_score[X]
+                        - current_score[Y]
+                        + prior_flip
+                    )
+                    yield (operation, score_delta)
+
+
+class _TreeSearchMixin:
+    """
+    Mixin class providing shared functionality for tree-based causal discovery
+    algorithms (Chow-Liu and TAN).
+
+    Provides static helpers for resolving the ``edge_weights_fn`` argument,
+    computing pairwise edge weights, and constructing a directed spanning tree
+    (DAG) from a weight matrix.  Both :class:`ChowLiu` and :class:`TAN` inherit
+    from this mixin so that the shared logic lives in exactly one place.
+    """
+
+    _EDGE_WEIGHT_FNS = {
+        "mutual_info": mutual_info_score,
+        "adjusted_mutual_info": adjusted_mutual_info_score,
+        "normalized_mutual_info": normalized_mutual_info_score,
+    }
+
+    @staticmethod
+    def _resolve_edge_weights_fn(edge_weights_fn):
+        """
+        Resolve ``edge_weights_fn`` to a callable of the form ``fn(array, array)``.
+
+        Accepts either one of the string shorthands in
+        :attr:`_EDGE_WEIGHT_FNS` or a callable (returned unchanged). Anything
+        else raises ``ValueError``.
+        """
+        if callable(edge_weights_fn):
+            return edge_weights_fn
+        try:
+            return _TreeSearchMixin._EDGE_WEIGHT_FNS[edge_weights_fn]
+        except (KeyError, TypeError):
+            raise ValueError(
+                f"edge_weights_fn should be one of {list(_TreeSearchMixin._EDGE_WEIGHT_FNS)}, "
+                f"or a callable of the form fn(array, array). Got: {edge_weights_fn!r}"
+            )
+
+    @staticmethod
+    def _get_weights(data, edge_weights_fn="mutual_info", n_jobs=-1, show_progress=True):
+        """
+        Compute the pairwise edge weight matrix.
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            Dataframe where each column represents one variable.
+
+        edge_weights_fn : str or callable, default="mutual_info"
+            Method to use for computing edge weights. Options are:
+
+            - ``"mutual_info"``: Mutual Information Score.
+            - ``"adjusted_mutual_info"``: Adjusted Mutual Information Score.
+            - ``"normalized_mutual_info"``: Normalized Mutual Information Score.
+            - A callable of the form ``fn(array, array) -> float``.
+
+        n_jobs : int, default=-1
+            Number of jobs to run in parallel. ``-1`` means use all processors.
+
+        show_progress : bool, default=True
+            If ``True``, shows a progress bar.
+
+        Returns
+        -------
+        weights : np.ndarray, shape (n_columns, n_columns)
+            Symmetric matrix where ``weights[i, j]`` is the edge weight between
+            variable *i* and variable *j*.
+        """
+        edge_weights_fn = _TreeSearchMixin._resolve_edge_weights_fn(edge_weights_fn)
+
+        n_vars = len(data.columns)
+        pbar = combinations(data.columns, 2)
+        if show_progress and config.SHOW_PROGRESS:
+            pbar = tqdm(pbar, total=(n_vars * (n_vars - 1) / 2), desc="Building tree")
+
+        vals = Parallel(n_jobs=n_jobs)(delayed(edge_weights_fn)(data.loc[:, u], data.loc[:, v]) for u, v in pbar)
+        weights = np.zeros((n_vars, n_vars))
+        indices = np.triu_indices(n_vars, k=1)
+        weights[indices] = vals
+        weights.T[indices] = vals
+        return weights
+
+    @staticmethod
+    def _create_tree_and_dag(weights, columns, root_node):
+        """
+        Build a DAG by computing the maximum spanning tree from a weight matrix
+        and directing all edges away from ``root_node`` via BFS.
+
+        Parameters
+        ----------
+        weights : np.ndarray, shape (n_columns, n_columns)
+            Symmetric matrix where each element represents an edge weight.
+
+        columns : list or array-like
+            Names of the columns (and rows) of the weight matrix.
+
+        root_node : str, int, or any hashable python object
+            The root node of the tree structure.
+
+        Returns
+        -------
+        model : pgmpy.base.DAG
+            The estimated DAG rooted at ``root_node``.
+        """
+        T = nx.maximum_spanning_tree(
+            nx.from_pandas_adjacency(
+                pd.DataFrame(weights, index=columns, columns=columns),
+                create_using=nx.Graph,
+            )
+        )
+        D = nx.bfs_tree(T, root_node)
+        return DAG(D)
