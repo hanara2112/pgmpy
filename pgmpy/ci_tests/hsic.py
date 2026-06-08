@@ -80,6 +80,9 @@ class HSIC(BaseCITest):
       scaled by ``1 / sqrt(d)`` for ``d``-dimensional inputs.
     * ``bandwidth="median"``: ``sqrt(2) * median`` of the pairwise Euclidean
       distances, falling back to ``1.0`` when the median distance is zero.
+    * For ``null_dist="gamma"``, the statistic is matched to a Gamma using the
+      closed-form null moments of [2]; the ``1/6`` and ``72 = 2*6**2`` constants
+      come from that variance estimator, which needs ``n >= 6``.
 
     References
     ----------
@@ -164,7 +167,7 @@ class HSIC(BaseCITest):
         return K - col_mean[None, :] - col_mean[:, None] + col_mean.mean()
 
     def _hsic_gamma_pvalue(self, test_stat, K, L, Kc, Lc):
-        """Gamma p-value using exact null moments (Proposition 6(i) of [2])."""
+        """Gamma p-value using the closed-form null moments of [2] (see Notes)."""
         n = K.shape[0]
         if n < 6:
             return 1.0
