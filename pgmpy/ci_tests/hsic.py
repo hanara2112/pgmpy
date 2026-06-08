@@ -4,10 +4,10 @@ from scipy import stats
 from scipy.spatial.distance import pdist
 from sklearn.gaussian_process.kernels import RBF, Kernel
 
-from ._base import _BaseCITest, _CITestResult
+from ._base import BaseCITest, _CITestResult
 
 
-class HSIC(_BaseCITest):
+class HSIC(BaseCITest):
     r"""
     Hilbert-Schmidt Independence Criterion (HSIC) [1] test for marginal
     independence of continuous variables.
@@ -30,23 +30,22 @@ class HSIC(_BaseCITest):
     ----------
     data : pandas.DataFrame
         The dataset in which to test the independence condition.
-    kernel : sklearn Kernel, tuple of two Kernels, or None
-        Kernel(s) for X and Y; a single object is shared by both. Default: RBF
-        with bandwidth heuristic.
-    bandwidth : {"heuristic", "median"}, default="heuristic"
-        RBF length-scale rule when ``kernel`` is None.
-        ``"heuristic"`` uses a piecewise width by sample size
-        (``0.8`` if ``n < 200``, ``0.5`` if ``n < 1200``, else ``0.3``),
-        scaled by ``1 / sqrt(d)`` for ``d``-dimensional inputs.
-        ``"median"`` uses ``sqrt(2) * median`` of pairwise Euclidean
-        distances (falling back to ``1.0`` if the median is zero).
-    null_dist : {"gamma", "permutation"}, default="gamma"
+    kernel : Kernel or (Kernel, Kernel), default=None
+        Kernel(s) for X and Y. A single
+        :class:`~sklearn.gaussian_process.kernels.Kernel` is shared by both,
+        while a 2-tuple assigns one kernel to each variable. When None, an RBF
+        kernel built with the ``bandwidth`` heuristic is used (see Notes).
+    bandwidth : str, default="heuristic"
+        RBF length-scale rule used when ``kernel`` is None. One of
+        ``"heuristic"`` or ``"median"`` (see Notes).
+    null_dist : str, default="gamma"
         Null approximation. ``"gamma"`` [2] is faster but assumes RBF-like
         kernels; use ``"permutation"`` [1] for non-RBF kernels.
     n_permutations : int, default=100
         Number of permutations (used only when ``null_dist="permutation"``).
-    random_state : int, np.random.Generator, or None, default=None
-        Seed for permutation reproducibility.
+    seed : int or None, default=None
+        Seed for permutation reproducibility (used only when
+        ``null_dist="permutation"``).
 
     Examples
     --------
@@ -69,6 +68,18 @@ class HSIC(_BaseCITest):
         The p-value for the test. Set after calling the test.
     effect_size_ : None
         Not defined for HSIC.
+
+    Notes
+    -----
+    Each variable is standardized (zero mean, unit variance) before the kernel
+    is evaluated. When ``kernel`` is None, the RBF length-scale is set by one of
+    the following heuristics:
+
+    * ``bandwidth="heuristic"``: a piecewise width chosen from the sample size
+      ``n`` (``0.8`` if ``n < 200``, ``0.5`` if ``n < 1200``, else ``0.3``),
+      scaled by ``1 / sqrt(d)`` for ``d``-dimensional inputs.
+    * ``bandwidth="median"``: ``sqrt(2) * median`` of the pairwise Euclidean
+      distances, falling back to ``1.0`` when the median distance is zero.
 
     References
     ----------
@@ -93,7 +104,7 @@ class HSIC(_BaseCITest):
         bandwidth: str = "heuristic",
         null_dist: str = "gamma",
         n_permutations: int = 100,
-        random_state: int | np.random.Generator | None = None,
+        seed: int | None = None,
         use_cache: bool = True,
     ):
         if bandwidth not in ("heuristic", "median"):
@@ -114,7 +125,22 @@ class HSIC(_BaseCITest):
         self.bandwidth = bandwidth
         self.null_dist = null_dist
         self.n_permutations = n_permutations
-        self.random_state = random_state
+        self.seed = seed
+
+        # Standardize each non-constant column once; constant ones are rejected
+        # in `_compute_result`. Default RBF kernels are built only if needed.
+        std = self.data.std(ddof=1)
+        self._std_data = {
+            col: ((self.data[col] - self.data[col].mean()) / std[col]).to_numpy().reshape(-1, 1)
+            for col in self.data.columns
+            if std[col] > 0
+        }
+        self._default_kernels = (
+            {col: RBF(length_scale=self._length_scale(x)) for col, x in self._std_data.items()}
+            if self.kernel_X_ is None or self.kernel_Y_ is None
+            else {}
+        )
+
         super().__init__(use_cache=use_cache)
 
     @staticmethod
@@ -169,15 +195,13 @@ class HSIC(_BaseCITest):
         if Z:
             raise ValueError("HSIC does not support conditioning variables; use KCI.")
 
-        x = self.data[X].to_numpy(dtype=float).reshape(-1, 1)
-        y = self.data[Y].to_numpy(dtype=float).reshape(-1, 1)
+        for var in (X, Y):
+            if var not in self._std_data:
+                raise ValueError(f"Column {var!r} is constant; HSIC requires non-constant variables.")
 
-        x_std, y_std = x.std(ddof=1), y.std(ddof=1)
-        x = (x - x.mean()) / x_std if x_std > 0 else np.zeros_like(x)
-        y = (y - y.mean()) / y_std if y_std > 0 else np.zeros_like(y)
-
-        kernel_x = self.kernel_X_ if self.kernel_X_ is not None else RBF(length_scale=self._length_scale(x))
-        kernel_y = self.kernel_Y_ if self.kernel_Y_ is not None else RBF(length_scale=self._length_scale(y))
+        x, y = self._std_data[X], self._std_data[Y]
+        kernel_x = self.kernel_X_ if self.kernel_X_ is not None else self._default_kernels[X]
+        kernel_y = self.kernel_Y_ if self.kernel_Y_ is not None else self._default_kernels[Y]
 
         Kx, Ky = kernel_x(x), kernel_y(y)
         Kxc, Kyc = self._center_kernel(Kx), self._center_kernel(Ky)
@@ -185,7 +209,7 @@ class HSIC(_BaseCITest):
 
         if self.null_dist == "permutation":
             # Permutation commutes with centering, so reindex Kyc instead of re-centering.
-            rng = np.random.default_rng(self.random_state)
+            rng = np.random.default_rng(self.seed)
             n = y.shape[0]
             null_stats = np.empty(self.n_permutations)
             for i in range(self.n_permutations):

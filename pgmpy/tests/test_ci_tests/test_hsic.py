@@ -59,10 +59,10 @@ class TestHSIC:
 
     def test_permutation(self, hsic_data):
         df_ind, df_dep, _ = hsic_data
-        assert HSIC(data=df_ind, null_dist="permutation", n_permutations=200, random_state=0)(
+        assert HSIC(data=df_ind, null_dist="permutation", n_permutations=200, seed=0)(
             "X", "Y", [], significance_level=0.05
         )
-        assert not HSIC(data=df_dep, null_dist="permutation", n_permutations=200, random_state=0)(
+        assert not HSIC(data=df_dep, null_dist="permutation", n_permutations=200, seed=0)(
             "X", "Y", [], significance_level=0.05
         )
 
@@ -71,10 +71,16 @@ class TestHSIC:
         df_small = pd.DataFrame({"X": [1.0, 2.0, 3.0, 4.0, 5.0], "Y": [5.0, 4.0, 3.0, 2.0, 1.0]})
         assert HSIC(data=df_small).run_test("X", "Y", [])[1] == 1.0
 
-        # Degenerate X (constant column) yields non-positive null moments -> p = 1.0
+    def test_constant_column_raises(self):
+        # A constant (zero-variance) column has no defined kernel scaling.
         rng = np.random.default_rng(seed=0)
         df_const = pd.DataFrame({"X": np.zeros(50), "Y": rng.standard_normal(50)})
-        assert HSIC(data=df_const).run_test("X", "Y", [])[1] == 1.0
+        with pytest.raises(ValueError, match="constant"):
+            HSIC(data=df_const).run_test("X", "Y", [])
+
+        # An unused constant column must not block testing the other variables.
+        df_extra = pd.DataFrame({"X": rng.standard_normal(50), "Y": rng.standard_normal(50), "C": np.ones(50)})
+        HSIC(data=df_extra).run_test("X", "Y", [])
 
     def test_conditioning_not_supported(self, hsic_data):
         df_ind, _, _ = hsic_data
