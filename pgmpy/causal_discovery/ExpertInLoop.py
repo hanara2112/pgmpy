@@ -5,6 +5,7 @@ from itertools import combinations
 
 import networkx as nx
 import pandas as pd
+from sklearn.base import clone
 
 from pgmpy import config
 from pgmpy.base import DAG
@@ -58,6 +59,12 @@ class ExpertInLoop(BaseCausalDiscovery):
         Built-in functions that can be used:
         - `pgmpy.utils.manual_pairwise_orient`: Prompts the user to specify direction.
         - `pgmpy.utils.llm_pairwise_orient`: Uses an LLM to determine direction.
+
+    pairwise_estimator : pgmpy.causal_discovery estimator, default=None
+        A pairwise causal discovery estimator (e.g. `LLMPairwise`) used to
+        orient each candidate edge. It is fit on the two variables and the
+        edge is read from its `causal_graph_`. Used instead of `orientation_fn`
+        when provided.
 
     orientations : set, default=set()
         A set of edges that will be used as the preferred orientation over
@@ -131,20 +138,18 @@ class ExpertInLoop(BaseCausalDiscovery):
     ExpertInLoop(effect_size_threshold=0.0001,
                  expert_knowledge=Expert Knowledge: ...)
 
-    Using LLM-based orientation (requires API key):
+    Using LLM-based orientation through a pairwise estimator (requires API key):
 
-    >>> from functools import partial
-    >>> from pgmpy.utils import llm_pairwise_orient
+    >>> from pgmpy.causal_discovery import LLMPairwise
     >>> variable_descriptions = {
     ...     "Smoker": "Whether a person smokes",
     ...     "Cancer": "Whether a person has cancer",
     ... }
-    >>> orientation_fn = partial(
-    ...     llm_pairwise_orient,
-    ...     variable_descriptions=variable_descriptions,
+    >>> pairwise_estimator = LLMPairwise(
+    ...     descriptions=variable_descriptions,
     ...     llm_model="gemini/gemini-1.5-flash",
     ... )
-    >>> eil = ExpertInLoop(orientation_fn=orientation_fn)
+    >>> eil = ExpertInLoop(pairwise_estimator=pairwise_estimator)
     >>> eil.fit(df)  # doctest: +SKIP
 
     References
@@ -159,6 +164,7 @@ class ExpertInLoop(BaseCausalDiscovery):
         effect_size_threshold: float = 0.05,
         ci_test: str | None = None,
         orientation_fn: Callable = llm_pairwise_orient,
+        pairwise_estimator=None,
         orientations: set[tuple[str, str]] | None = None,
         expert_knowledge=None,
         use_cache: bool = True,
@@ -168,6 +174,7 @@ class ExpertInLoop(BaseCausalDiscovery):
         self.effect_size_threshold = effect_size_threshold
         self.ci_test = ci_test
         self.orientation_fn = orientation_fn
+        self.pairwise_estimator = pairwise_estimator
         self.orientations = orientations
         self.expert_knowledge = expert_knowledge
         self.use_cache = use_cache
@@ -348,7 +355,10 @@ class ExpertInLoop(BaseCausalDiscovery):
             # 1. If `orientations` are provided, use them
             # 2. Check temporal ordering from expert_knowledge
             # 3. Try to use cached orientations if `use_cache=True`
-            # 4. If no cached orientation, call the orientation_fn
+            # 4. If no cached orientation, orient the pair using `pairwise_estimator`
+            #    if provided, otherwise fall back to `orientation_fn`. The cache
+            #    ensures expensive estimators (e.g. LLMPairwise) are not queried
+            #    twice for the same pair.
 
             # Get orientations set (handle None case)
             orientations_set = self.orientations if self.orientations is not None else set()
@@ -371,7 +381,16 @@ class ExpertInLoop(BaseCausalDiscovery):
             elif self.use_cache and (selected_edge.v, selected_edge.u) in self.orientation_cache_:
                 edge_direction = (selected_edge.v, selected_edge.u)
             else:
-                edge_direction = self.orientation_fn(selected_edge.u, selected_edge.v)
+                if self.pairwise_estimator is not None:
+                    # Fit a fresh clone on the two-variable problem so no fitted
+                    # state leaks into the user's estimator, then read the
+                    # oriented edge from the learned causal graph.
+                    est = clone(self.pairwise_estimator)
+                    est.fit(X[[selected_edge.u, selected_edge.v]])
+                    edges = list(est.causal_graph_.edges())
+                    edge_direction = edges[0] if edges else None
+                else:
+                    edge_direction = self.orientation_fn(selected_edge.u, selected_edge.v)
                 if self.use_cache is True and edge_direction is not None:
                     self.orientation_cache_.add(edge_direction)
 
