@@ -10,6 +10,7 @@ from sklearn.utils.estimator_checks import parametrize_with_checks
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery import ExpertInLoop
+from pgmpy.causal_discovery._base import BaseCausalDiscovery
 from pgmpy.ci_tests._base import BaseCITest
 from pgmpy.estimators import ExpertKnowledge
 
@@ -294,6 +295,7 @@ def test_combined_expert_knowledge(adult_data):
     )
 
     estimator = ExpertInLoop(
+        orientation_fn=simple_orient,
         expert_knowledge=expert_knowledge,
         effect_size_threshold=0.0001,
         show_progress=False,
@@ -318,6 +320,7 @@ def test_edge_orientation_priority(adult_data):
     orientations = {("Income", "Education")}  # Opposite of temporal order
 
     estimator = ExpertInLoop(
+        orientation_fn=simple_orient,
         expert_knowledge=expert_knowledge,
         orientations=orientations,
         effect_size_threshold=0.0001,
@@ -607,3 +610,34 @@ class TestBreakCycle:
         existing_edges = {("A", "B"), ("B", "D"), ("A", "C"), ("C", "D")}
         for edge in result:
             assert edge in existing_edges
+
+
+# --- pairwise_estimator tests ---
+
+
+class FakePairwise(BaseCausalDiscovery):
+    """Offline pairwise estimator that orients edges alphabetically."""
+
+    def _fit(self, X: pd.DataFrame):
+        u, v = list(X.columns)
+        source, target = (u, v) if str(u) < str(v) else (v, u)
+        self.causal_graph_ = DAG([(source, target)])
+        return self
+
+
+def test_pairwise_estimator():
+    """ExpertInLoop orients edges by fitting a pairwise estimator."""
+    rng = np.random.default_rng(42)
+    n = 500
+    a = rng.integers(0, 2, n)
+    b = a ^ (rng.random(n) < 0.1).astype(int)
+    c = b ^ (rng.random(n) < 0.1).astype(int)
+    data = pd.DataFrame({"A": a, "B": b, "C": c}, dtype="category")
+
+    est = ExpertInLoop(pairwise_estimator=FakePairwise(), effect_size_threshold=0.01, show_progress=False)
+    est.fit(data)
+
+    assert nx.is_directed_acyclic_graph(est.causal_graph_)
+    assert est.causal_graph_.number_of_edges() > 0
+    for u, v in est.causal_graph_.edges():
+        assert str(u) < str(v)

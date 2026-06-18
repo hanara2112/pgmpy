@@ -5,14 +5,12 @@ from itertools import combinations
 
 import networkx as nx
 import pandas as pd
-from sklearn.base import clone
 
 from pgmpy import config
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
 from pgmpy.ci_tests import get_ci_test
 from pgmpy.global_vars import logger
-from pgmpy.utils import llm_pairwise_orient
 
 
 class ExpertInLoop(BaseCausalDiscovery):
@@ -49,7 +47,7 @@ class ExpertInLoop(BaseCausalDiscovery):
         tries to automatically detect a suitable CI test based on the variable
         types. See :mod:`pgmpy.estimators.CITests` for available tests.
 
-    orientation_fn : callable, default=llm_pairwise_orient
+    orientation_fn : callable, default=None
         A function to determine edge orientation. The function should take at
         least two arguments (the names of the two variables) and return either:
         - A tuple (source, target) representing the directed edge from source
@@ -58,7 +56,6 @@ class ExpertInLoop(BaseCausalDiscovery):
 
         Built-in functions that can be used:
         - `pgmpy.utils.manual_pairwise_orient`: Prompts the user to specify direction.
-        - `pgmpy.utils.llm_pairwise_orient`: Uses an LLM to determine direction.
 
     pairwise_estimator : pgmpy.causal_discovery estimator, default=None
         A pairwise causal discovery estimator (e.g. `LLMPairwise`) used to
@@ -81,8 +78,8 @@ class ExpertInLoop(BaseCausalDiscovery):
         precedence over temporal ordering.
 
     use_cache : bool, default=True
-        If True, the algorithm caches results from `orientation_fn` and reuses
-        them in future calls instead of querying the orientation function again.
+        If True, the algorithm caches orientation results and reuses them in
+        future calls instead of querying the orientation source again.
 
     show_progress : bool, default=True
         If True, prints information about the running status.
@@ -163,7 +160,7 @@ class ExpertInLoop(BaseCausalDiscovery):
         pval_threshold: float = 0.05,
         effect_size_threshold: float = 0.05,
         ci_test: str | None = None,
-        orientation_fn: Callable = llm_pairwise_orient,
+        orientation_fn: Callable | None = None,
         pairwise_estimator=None,
         orientations: set[tuple[str, str]] | None = None,
         expert_knowledge=None,
@@ -382,15 +379,15 @@ class ExpertInLoop(BaseCausalDiscovery):
                 edge_direction = (selected_edge.v, selected_edge.u)
             else:
                 if self.pairwise_estimator is not None:
-                    # Fit a fresh clone on the two-variable problem so no fitted
-                    # state leaks into the user's estimator, then read the
-                    # oriented edge from the learned causal graph.
-                    est = clone(self.pairwise_estimator)
-                    est.fit(X[[selected_edge.u, selected_edge.v]])
-                    edges = list(est.causal_graph_.edges())
+                    self.pairwise_estimator.fit(X[[selected_edge.u, selected_edge.v]])
+                    edges = list(self.pairwise_estimator.causal_graph_.edges())
                     edge_direction = edges[0] if edges else None
-                else:
+                elif self.orientation_fn is not None:
                     edge_direction = self.orientation_fn(selected_edge.u, selected_edge.v)
+                else:
+                    raise ValueError(
+                        "No orientation source provided. Specify either `pairwise_estimator` or `orientation_fn`."
+                    )
                 if self.use_cache is True and edge_direction is not None:
                     self.orientation_cache_.add(edge_direction)
 
