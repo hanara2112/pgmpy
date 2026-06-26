@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from itertools import combinations
 
 import networkx as nx
@@ -20,12 +19,10 @@ class ExpertInLoop(BaseCausalDiscovery):
     This class implements an iterative causal discovery algorithm that combines statistical independence testing with
     expert knowledge for edge orientation. The algorithm works by iteratively adding and removing edges between
     variables based on conditional independence tests, similar to the Greedy Equivalence Search (GES) algorithm. When
-    adding edges, the algorithm queries an expert (human or automated through LLMs) for the edge orientation.
+    adding edges, the algorithm orients each pair using a pairwise causal discovery estimator (e.g. `LLMPairwise`).
 
     The algorithm can use various sources for edge orientation:
-    - Manual user input
-    - Large Language Models (LLMs)
-    - Custom orientation functions
+    - A pairwise causal discovery estimator.
     - Pre-specified orientations
     - Specified `expert_knowledge` argument.
 
@@ -47,25 +44,15 @@ class ExpertInLoop(BaseCausalDiscovery):
         tries to automatically detect a suitable CI test based on the variable
         types. See :mod:`pgmpy.estimators.CITests` for available tests.
 
-    orientation_fn : callable, default=None
-        A function to determine edge orientation. The function should take at
-        least two arguments (the names of the two variables) and return either:
-        - A tuple (source, target) representing the directed edge from source
-          to target
-        - None, representing no edge between the variables
-
-        Built-in functions that can be used:
-        - `pgmpy.utils.manual_pairwise_orient`: Prompts the user to specify direction.
-
     pairwise_estimator : pgmpy.causal_discovery estimator, default=None
-        A pairwise causal discovery estimator (e.g. `LLMPairwise`) used to
-        orient each candidate edge. It is fit on the two variables and the
-        edge is read from its `causal_graph_`. Used instead of `orientation_fn`
-        when provided.
+        A pairwise causal discovery estimator (e.g. `LLMPairwise`) fit on each
+        candidate pair, with the edge read from its `causal_graph_`. Required;
+        used for any pair not already fixed by `orientations` or
+        `expert_knowledge`.
 
     orientations : set, default=set()
         A set of edges that will be used as the preferred orientation over
-        the output of `orientation_fn`. Edges should be specified as tuples
+        the output of `pairwise_estimator`. Edges should be specified as tuples
         (source, target).
 
     expert_knowledge : ExpertKnowledge, default=None
@@ -76,10 +63,6 @@ class ExpertInLoop(BaseCausalDiscovery):
 
         Note: Explicit orientations in the `orientations` parameter take
         precedence over temporal ordering.
-
-    use_cache : bool, default=True
-        If True, the algorithm caches orientation results and reuses them in
-        future calls instead of querying the orientation source again.
 
     show_progress : bool, default=True
         If True, prints information about the running status.
@@ -98,30 +81,42 @@ class ExpertInLoop(BaseCausalDiscovery):
     feature_names_in_ : np.ndarray
         The feature names in the data used to learn the causal graph.
 
-    orientation_cache_ : set
-        Cache of edge orientations learned during fitting.
-
     Examples
     --------
-    Basic usage with custom orientation function:
+    Basic usage with a custom pairwise estimator:
 
     >>> from pgmpy.utils import get_example_model
+    >>> from pgmpy.base import DAG
     >>> from pgmpy.causal_discovery import ExpertInLoop
+    >>> from pgmpy.causal_discovery._base import BaseCausalDiscovery
     >>> model = get_example_model("cancer")
     >>> df = model.simulate(int(1e3))
-    >>> def custom_orient(var1, var2, **kwargs):
-    ...     return (var1, var2) if var1 < var2 else (var2, var1)
+    >>> class AlphabeticalPairwise(BaseCausalDiscovery):
+    ...     def _fit(self, X):
+    ...         u, v = sorted(self.feature_names_in_)
+    ...         self.causal_graph_ = DAG([(u, v)])
+    ...         return self
     ...
-    >>> eil = ExpertInLoop(orientation_fn=custom_orient, effect_size_threshold=0.0001)
+    >>> eil = ExpertInLoop(
+    ...     pairwise_estimator=AlphabeticalPairwise(), effect_size_threshold=0.0001
+    ... )
     >>> eil.fit(df)  # doctest: +ELLIPSIS
     ExpertInLoop(effect_size_threshold=0.0001,
-                 orientation_fn=<function custom_orient at 0x...>)
+                 pairwise_estimator=AlphabeticalPairwise())
     >>> _ = eil.causal_graph_.edges()
 
     Using pre-specified orientations:
 
+    `orientations` and `expert_knowledge` override the estimator for the pairs
+    they cover; `pairwise_estimator` orients everything else and is always
+    required:
+
     >>> orientations = {("Pollution", "Cancer"), ("Smoker", "Cancer")}
-    >>> eil = ExpertInLoop(orientations=orientations, effect_size_threshold=0.0001)
+    >>> eil = ExpertInLoop(
+    ...     pairwise_estimator=AlphabeticalPairwise(),
+    ...     orientations=orientations,
+    ...     effect_size_threshold=0.0001,
+    ... )
     >>> eil.fit(df)  # doctest: +SKIP
 
     Using expert knowledge with temporal ordering:
@@ -130,10 +125,15 @@ class ExpertInLoop(BaseCausalDiscovery):
     >>> expert = ExpertKnowledge(
     ...     temporal_order=[["Pollution", "Smoker"], ["Cancer"], ["Xray", "Dyspnoea"]]
     ... )
-    >>> eil = ExpertInLoop(expert_knowledge=expert, effect_size_threshold=0.0001)
+    >>> eil = ExpertInLoop(
+    ...     pairwise_estimator=AlphabeticalPairwise(),
+    ...     expert_knowledge=expert,
+    ...     effect_size_threshold=0.0001,
+    ... )
     >>> eil.fit(df)  # doctest: +ELLIPSIS
     ExpertInLoop(effect_size_threshold=0.0001,
-                 expert_knowledge=Expert Knowledge: ...)
+                 expert_knowledge=Expert Knowledge: ...,
+                 pairwise_estimator=AlphabeticalPairwise())
 
     Using LLM-based orientation through a pairwise estimator (requires API key):
 
@@ -160,21 +160,17 @@ class ExpertInLoop(BaseCausalDiscovery):
         pval_threshold: float = 0.05,
         effect_size_threshold: float = 0.05,
         ci_test: str | None = None,
-        orientation_fn: Callable | None = None,
         pairwise_estimator=None,
         orientations: set[tuple[str, str]] | None = None,
         expert_knowledge=None,
-        use_cache: bool = True,
         show_progress: bool = True,
     ):
         self.pval_threshold = pval_threshold
         self.effect_size_threshold = effect_size_threshold
         self.ci_test = ci_test
-        self.orientation_fn = orientation_fn
         self.pairwise_estimator = pairwise_estimator
         self.orientations = orientations
         self.expert_knowledge = expert_knowledge
-        self.use_cache = use_cache
         self.show_progress = show_progress
 
     def _test_all(self, ci_test, dag: DAG, data: pd.DataFrame) -> pd.DataFrame:
@@ -276,26 +272,27 @@ class ExpertInLoop(BaseCausalDiscovery):
         self : ExpertInLoop
             Returns the instance with the fitted attributes.
         """
+        # Step 0: Validate arguments and assign defaults before any computation.
+        if self.pairwise_estimator is None:
+            raise ValueError(
+                "`pairwise_estimator` must be provided to orient edges, "
+                "e.g. `ExpertInLoop(pairwise_estimator=LLMPairwise(...))`."
+            )
+
         self.variables_ = list(X.columns)
+        orientations = self.orientations if self.orientations is not None else set()
 
-        # Initialize orientation cache (preserve if pre-populated)
-        if not hasattr(self, "orientation_cache_"):
-            self.orientation_cache_ = set()
-
-        # Step 0: Create a new DAG on all the variables with no edge.
-        dag = DAG()
-        dag.add_nodes_from(self.variables_)
-
-        # Get the CI test
-        ci_test = get_ci_test(test=self.ci_test, data=X)
-
-        # Initialize blacklisted_edges with forbidden_edges from expert knowledge
         blacklisted_edges = []
+        required_edges = []
         if self.expert_knowledge is not None:
             blacklisted_edges = list(self.expert_knowledge.forbidden_edges)
-            # Add required edges to the DAG
-            if self.expert_knowledge.required_edges:
-                dag.add_edges_from(self.expert_knowledge.required_edges)
+            required_edges = list(self.expert_knowledge.required_edges)
+
+        # Initialize the working DAG (seeded with required edges) and the CI test.
+        dag = DAG()
+        dag.add_nodes_from(self.variables_)
+        dag.add_edges_from(required_edges)
+        ci_test = get_ci_test(test=self.ci_test, data=X)
 
         while True:
             # Step 1: Compute effects and p-values between every combination of variables
@@ -346,68 +343,39 @@ class ExpertInLoop(BaseCausalDiscovery):
             selected_edge = nonedge_effects.iloc[nonedge_effects.effect.argmax()]
             edge_direction = None
 
-            # Step 3.5: Find the edge orientation for the selected pair of variables
-            #
-            # Priority order:
-            # 1. If `orientations` are provided, use them
-            # 2. Check temporal ordering from expert_knowledge
-            # 3. Try to use cached orientations if `use_cache=True`
-            # 4. If no cached orientation, orient the pair using `pairwise_estimator`
-            #    if provided, otherwise fall back to `orientation_fn`. The cache
-            #    ensures expensive estimators (e.g. LLMPairwise) are not queried
-            #    twice for the same pair.
+            # Step 3.5: Orient the selected pair, in priority order:
+            #   1. explicit `orientations`
+            #   2. temporal ordering from `expert_knowledge`
+            #   3. the `pairwise_estimator`
+            u, v = selected_edge.u, selected_edge.v
 
-            # Get orientations set (handle None case)
-            orientations_set = self.orientations if self.orientations is not None else set()
-
-            if (selected_edge.u, selected_edge.v) in orientations_set:
-                edge_direction = (selected_edge.u, selected_edge.v)
-            elif (selected_edge.v, selected_edge.u) in orientations_set:
-                edge_direction = (selected_edge.v, selected_edge.u)
+            if (u, v) in orientations:
+                edge_direction = (u, v)
+            elif (v, u) in orientations:
+                edge_direction = (v, u)
             elif self.expert_knowledge is not None and self.expert_knowledge.temporal_ordering:
-                # Check if temporal order can determine the direction
-                u_order = self.expert_knowledge.temporal_ordering.get(selected_edge.u)
-                v_order = self.expert_knowledge.temporal_ordering.get(selected_edge.v)
-                if u_order is not None and v_order is not None:
-                    if u_order < v_order:
-                        edge_direction = (selected_edge.u, selected_edge.v)
-                    elif v_order < u_order:
-                        edge_direction = (selected_edge.v, selected_edge.u)
-            elif self.use_cache and (selected_edge.u, selected_edge.v) in self.orientation_cache_:
-                edge_direction = (selected_edge.u, selected_edge.v)
-            elif self.use_cache and (selected_edge.v, selected_edge.u) in self.orientation_cache_:
-                edge_direction = (selected_edge.v, selected_edge.u)
+                u_order = self.expert_knowledge.temporal_ordering.get(u)
+                v_order = self.expert_knowledge.temporal_ordering.get(v)
+                if None not in (u_order, v_order) and u_order != v_order:
+                    edge_direction = (u, v) if u_order < v_order else (v, u)
             else:
-                if self.pairwise_estimator is not None:
-                    self.pairwise_estimator.fit(X[[selected_edge.u, selected_edge.v]])
-                    edges = list(self.pairwise_estimator.causal_graph_.edges())
-                    edge_direction = edges[0] if edges else None
-                elif self.orientation_fn is not None:
-                    edge_direction = self.orientation_fn(selected_edge.u, selected_edge.v)
-                else:
-                    raise ValueError(
-                        "No orientation source provided. Specify either `pairwise_estimator` or `orientation_fn`."
-                    )
-                if self.use_cache is True and edge_direction is not None:
-                    self.orientation_cache_.add(edge_direction)
+                self.pairwise_estimator.fit(X[[u, v]])
+                edges = list(self.pairwise_estimator.causal_graph_.edges())
+                edge_direction = edges[0] if edges else None
 
                 if config.SHOW_PROGRESS and self.show_progress and edge_direction is not None:
                     logger.info(
                         "\rQueried for edge orientation between "
-                        f"{selected_edge.u} and {selected_edge.v}. Got: "
-                        f"{edge_direction[0]} -> {edge_direction[1]}"
+                        f"{u} and {v}. Got: {edge_direction[0]} -> {edge_direction[1]}"
                     )
 
             # Step 3.6: Handle the edge direction
-            # 1. If orientation function returns None, do not add the edge
+            # 1. If the orientation source returns None, do not add the edge
             # 2. If new edge creates a cycle, try to resolve it
             # 3. Otherwise, add the edge
             if edge_direction is None:
-                logger.info(
-                    f"Orientation function returned None for edge {selected_edge.u} - {selected_edge.v}. "
-                    "Skipping this edge."
-                )
-                blacklisted_edges.append((selected_edge.u, selected_edge.v))
+                logger.info(f"Orientation returned None for edge {u} - {v}. Skipping this edge.")
+                blacklisted_edges.append((u, v))
             elif nx.has_path(dag, edge_direction[1], edge_direction[0]):
                 edges_to_remove = self._break_cycle(
                     dag,

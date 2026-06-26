@@ -35,6 +35,10 @@ class LLMPairwise(BaseCausalDiscovery):
     llm_kwargs : dict, default=None
         Additional keyword arguments passed to ``litellm.completion``, for example ``{"temperature": 0}``.
 
+    use_cache : bool, default=True
+        If ``True``, cache the oriented edge per variable pair and reuse it on later ``fit`` calls instead of
+        re-querying the LLM.
+
     Attributes
     ----------
     causal_graph_ : pgmpy.base.DAG
@@ -97,11 +101,13 @@ class LLMPairwise(BaseCausalDiscovery):
         system_prompt: str | None = None,
         llm_model: str = "gemini/gemini-1.5-flash",
         llm_kwargs: dict | None = None,
+        use_cache: bool = True,
     ):
         self.descriptions = descriptions
         self.system_prompt = system_prompt
         self.llm_model = llm_model
         self.llm_kwargs = llm_kwargs
+        self.use_cache = use_cache
 
     def _fit(self, X: pd.DataFrame):
         """
@@ -122,14 +128,21 @@ class LLMPairwise(BaseCausalDiscovery):
         if X.shape[1] != 2:
             raise ValueError(f"LLMPairwise requires exactly two variables, got {X.shape[1]}.")
 
-        # Step 2: Build the prompt from the variable names and descriptions.
         x, y = self.feature_names_in_
-        self.llm_model_ = self.llm_model
-        self.llm_prompt_ = self._build_prompt(x, y)
+        cache_key = frozenset((x, y))
+        cache = self.__dict__.setdefault("_orientation_cache", {})
 
-        # Step 3: Query the LLM and parse the chosen direction.
-        self.llm_response_ = self._query_llm(self.llm_prompt_)
-        source, target = self._parse_response(self.llm_response_, x, y)
+        # Step 2: Reuse a previously oriented pair instead of re-querying the LLM.
+        if self.use_cache and cache_key in cache:
+            source, target = cache[cache_key]
+        else:
+            # Step 3: Build the prompt, query the LLM, and parse the chosen direction.
+            self.llm_model_ = self.llm_model
+            self.llm_prompt_ = self._build_prompt(x, y)
+            self.llm_response_ = self._query_llm(self.llm_prompt_)
+            source, target = self._parse_response(self.llm_response_, x, y)
+            if self.use_cache:
+                cache[cache_key] = (source, target)
 
         # Step 4: Build the causal graph and store the fitted attributes.
         dag = DAG([(source, target)])

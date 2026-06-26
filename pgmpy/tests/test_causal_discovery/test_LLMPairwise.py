@@ -69,6 +69,30 @@ def test_fit(monkeypatch, data):
             LLMPairwise().fit(frame)
 
 
+def test_use_cache(monkeypatch, data):
+    calls = {"n": 0}
+
+    def fake_query(self, messages):
+        calls["n"] += 1
+        return "1"
+
+    monkeypatch.setattr(LLMPairwise, "_query_llm", fake_query)
+
+    # With caching, re-fitting the same pair reuses the result (no second query).
+    est = LLMPairwise(use_cache=True)
+    est.fit(data)
+    est.fit(data)
+    assert calls["n"] == 1
+    assert ("Smoker", "Cancer") in est.causal_graph_.edges()
+
+    # Without caching, every fit queries the LLM again.
+    calls["n"] = 0
+    est = LLMPairwise(use_cache=False)
+    est.fit(data)
+    est.fit(data)
+    assert calls["n"] == 2
+
+
 def test_build_prompt():
     est = LLMPairwise(
         descriptions={"Smoker": "Whether a person smokes"},
