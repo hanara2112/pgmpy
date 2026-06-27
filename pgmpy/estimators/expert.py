@@ -12,6 +12,81 @@ from pgmpy.estimators import StructureEstimator
 from pgmpy.estimators.CITests import ci_registry
 
 
+def llm_pairwise_orient(
+    x,
+    y,
+    descriptions,
+    system_prompt=None,
+    llm_model="gemini/gemini-1.5-flash",
+    **kwargs,
+):
+    """
+    Asks a Large Language Model (LLM) for the
+     orientation of an edge between `x` and `y`.
+
+    Parameters
+    ----------
+    x: str
+        The first variable's name
+
+    y: str
+        The second variable's name
+
+    descriptions: dict
+        A dict of the form {variable: description}
+          containing text description of the variables.
+
+    system_prompt: str
+        A system prompt to give the LLM.
+
+    llm_model: str (default: gemini/gemini-pro)
+        The LLM model to use. Please refer to litellm
+          documentation (https://docs.litellm.ai/docs/providers)
+        for available model options. Default is gemini-pro.
+
+    kwargs: kwargs
+        Any additional parameters to pass to litellm.completion method.
+
+    Returns
+    -------
+    tuple:
+        Returns a tuple (source, target) representing the edge direction.
+    """
+    try:
+        from litellm import completion
+    except ImportError as e:
+        raise ImportError(
+            f"{e}. litellm is required for using"
+            " LLM based pairwise orientation. "
+            "Please install using: pip install litellm"
+        ) from None
+
+    if system_prompt is None:
+        system_prompt = "You are an expert in Causal Inference"
+
+    prompt = f""" {system_prompt}. You are
+      given two variables with the following descriptions:
+        <A>: {descriptions[x]}
+        <B>: {descriptions[y]}
+
+        Which of the following two options is the most likely causal direction between them:
+        1. <A> causes <B>
+        2. <B> causes <A>
+
+        Return a single number (1 or 2) as your answer. I do not need the reasoning behind it.
+        Do not add any formatting in the answer.
+        """
+    response = completion(model=llm_model, messages=[{"role": "user", "content": prompt}])
+    response = response.choices[0].message.content
+    response_txt = response.strip().lower().replace("*", "")
+    if response_txt in ("a", "1"):
+        return (x, y)
+    elif response_txt in ("b", "2"):
+        return (y, x)
+    else:
+        raise ValueError("Results from the LLM are unclear. Try calling the function again.")
+
+
 class ExpertInLoop(StructureEstimator):
     def __init__(self, data: pd.DataFrame | None = None, **kwargs):
         warnings.warn(
@@ -66,7 +141,7 @@ class ExpertInLoop(StructureEstimator):
         pval_threshold: float = 0.05,
         effect_size_threshold: float = 0.05,
         ci_test: str | None = None,
-        orientation_fn: Callable[..., tuple[Hashable, Hashable] | None] | None = None,
+        orientation_fn: Callable[..., tuple[Hashable, Hashable] | None] = llm_pairwise_orient,
         orientations: set[tuple[str, str]] = set(),
         expert_knowledge: ExpertKnowledge | None = None,
         use_cache: bool = True,
@@ -102,7 +177,7 @@ class ExpertInLoop(StructureEstimator):
             tries to automatically detect the suitable CI test based on the variable
             types.
 
-        orientation_fn: callable (default: None)
+        orientation_fn: callable (default: pgmpy.utils.llm_pairwise_orient)
             A function to determine edge orientation. The function should at
             least take two arguments (the names of the two variables) and
             return either a tuple (source, target) representing the directed
@@ -115,10 +190,16 @@ class ExpertInLoop(StructureEstimator):
             - `pgmpy.utils.manual_pairwise_orient`: Prompts the user to specify the direction
               between two variables by presenting options and taking input.
 
+            - `pgmpy.utils.llm_pairwise_orient`: Uses a Large Language Model to determine direction.
+              Requires additional parameters:
+
+              * variable_descriptions: dict of {var_name: description} for context
+              * llm_model: name of the LLM model (default: "gemini/gemini-1.5-flash")
+              * system_prompt: optional custom system prompt
+
             Custom functions can be provided that implement any desired logic
             for determining edge orientation, including using local LLMs or
-            domain-specific heuristics. For LLM-based orientation, use
-            `pgmpy.causal_discovery.ExpertInLoop` with `pairwise_estimator=LLMPairwise(...)`.
+            domain-specific heuristics.
 
         orientations: set
             Users can specify a set of edges which would be used as the
@@ -150,7 +231,7 @@ class ExpertInLoop(StructureEstimator):
         --------
         >>> from pgmpy.example_models import load_model
         >>> from pgmpy.utils import manual_pairwise_orient
-        >>> from pgmpy.estimators import ExpertInLoop
+        >>> from pgmpy.estimators import ExpertInLoop, llm_pairwise_orient
         >>> model = load_model("bnlearn/cancer")
         >>> df = model.simulate(int(1e3))
 
@@ -160,7 +241,6 @@ class ExpertInLoop(StructureEstimator):
         ... )
 
         >>> # Using LLM-based orientation
-        >>> from pgmpy.causal_discovery import ExpertInLoop as CausalExpertInLoop, LLMPairwise
         >>> variable_descriptions = {
         ...     "Smoker": "A binary variable representing whether a person smokes or not.",
         ...     "Cancer": "A binary variable representing whether a person has cancer.",
@@ -168,12 +248,12 @@ class ExpertInLoop(StructureEstimator):
         ...     "Pollution": "A binary variable representing whether the person is in a high-pollution area or not.",
         ...     "Dyspnoea": "A binary variable representing whether a person has shortness of breath.",
         ... }
-        >>> dag = CausalExpertInLoop(
-        ...     pairwise_estimator=LLMPairwise(
-        ...         descriptions=variable_descriptions,
-        ...         llm_model="gemini/gemini-1.5-flash",
-        ...     )
-        ... ).fit(df).causal_graph_  # doctest: +SKIP
+        >>> dag = ExpertInLoop(df).estimate(  # doctest: +SKIP
+        ...     effect_size_threshold=0.0001,
+        ...     orientation_fn=llm_pairwise_orient,
+        ...     variable_descriptions=variable_descriptions,
+        ...     llm_model="gemini/gemini-1.5-flash",
+        ... )
         >>> dag.edges()  # doctest: +SKIP
         OutEdgeView([('Smoker', 'Cancer'), ('Cancer', 'Xray'), ('Cancer', 'Dyspnoea'), ('Pollution', 'Cancer')])
 
@@ -283,11 +363,6 @@ class ExpertInLoop(StructureEstimator):
             elif use_cache and (selected_edge.v, selected_edge.u) in self.orientation_cache:
                 edge_direction = (selected_edge.v, selected_edge.u)
             else:
-                if orientation_fn is None:
-                    raise ValueError(
-                        "No orientation source provided. Specify `orientation_fn` "
-                        "or use `pgmpy.causal_discovery.ExpertInLoop` with `pairwise_estimator`."
-                    )
                 edge_direction = orientation_fn(selected_edge.u, selected_edge.v, **kwargs)
                 if use_cache is True and edge_direction is not None:
                     self.orientation_cache.add(edge_direction)

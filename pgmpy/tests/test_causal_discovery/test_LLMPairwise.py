@@ -1,4 +1,5 @@
 import importlib
+import os
 import types
 from unittest.mock import MagicMock
 
@@ -12,6 +13,19 @@ from pgmpy.causal_discovery import LLMPairwise
 @pytest.fixture
 def data():
     return pd.DataFrame({"Smoker": [0, 1, 1, 0], "Cancer": [0, 1, 0, 0]})
+
+
+@pytest.mark.skipif("GEMINI_API_KEY" not in os.environ, reason="Gemini API key is not set")
+def test_llm_api():
+    """Integration test that actually queries the LLM (requires GEMINI_API_KEY)."""
+    descriptions = {
+        "Age": "The age of a person",
+        "Income": "The income i.e. amount of money the person makes",
+    }
+    df = pd.DataFrame({"Age": [0, 1, 1, 0], "Income": [0, 1, 0, 1]})
+
+    assert ("Age", "Income") in LLMPairwise(descriptions=descriptions).fit(df).causal_graph_.edges()
+    assert ("Age", "Income") in LLMPairwise(descriptions=descriptions).fit(df[["Income", "Age"]]).causal_graph_.edges()
 
 
 def expected_failed_checks(estimator):
