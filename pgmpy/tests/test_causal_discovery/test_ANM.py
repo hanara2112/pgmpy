@@ -1,7 +1,17 @@
+import numpy as np
 import pandas as pd
 import pytest
+from sklearn.linear_model import LinearRegression
 
 from pgmpy.causal_discovery import ANM
+
+
+def _nonlinear_data(n=500, seed=0):
+    """Generate additive-noise data with X -> Y, where Y = X ** 3 + noise."""
+    rng = np.random.default_rng(seed)
+    x = rng.uniform(-2, 2, n)
+    y = x**3 + rng.normal(0, 0.5, n)
+    return pd.DataFrame({"X": x, "Y": y})
 
 
 def test_init():
@@ -9,7 +19,48 @@ def test_init():
     assert est.get_params() == {"regressor": None, "ci_test": None, "random_state": 0}
 
 
-def test_fit_not_implemented():
-    data = pd.DataFrame({"X": [0.0, 1.0, 2.0], "Y": [1.0, 2.0, 3.0]})
-    with pytest.raises(NotImplementedError):
+def test_fit_recovers_direction():
+    data = _nonlinear_data()
+    est = ANM(random_state=0).fit(data)
+
+    assert list(est.causal_graph_.edges()) == [("X", "Y")]
+    assert est.direction_score_ > 0
+    assert est.adjacency_matrix_.loc["X", "Y"] == 1
+    assert est.adjacency_matrix_.loc["Y", "X"] == 0
+
+
+def test_reproducible():
+    data = _nonlinear_data()
+    score1 = ANM(random_state=0).fit(data).direction_score_
+    score2 = ANM(random_state=0).fit(data).direction_score_
+    assert score1 == score2
+
+
+def test_regressor_and_ci_test_override():
+    data = _nonlinear_data()
+    est = ANM(regressor=LinearRegression(), ci_test="gcm", random_state=0).fit(data)
+    assert list(est.causal_graph_.edges())[0] in [("X", "Y"), ("Y", "X")]
+
+
+def test_constant_input_raises():
+    data = pd.DataFrame({"X": [1.0, 1.0, 1.0], "Y": [1.0, 2.0, 3.0]})
+    with pytest.raises(ValueError, match="constant"):
+        ANM().fit(data)
+
+
+def test_wrong_number_of_variables_raises():
+    data = pd.DataFrame({"X": [0.0, 1.0, 2.0], "Y": [1.0, 2.0, 3.0], "Z": [2.0, 1.0, 0.0]})
+    with pytest.raises(ValueError, match="exactly two variables"):
+        ANM().fit(data)
+
+
+def test_non_finite_input_raises():
+    data = pd.DataFrame({"X": [0.0, 1.0, np.nan], "Y": [1.0, 2.0, 3.0]})
+    with pytest.raises(ValueError):
+        ANM().fit(data)
+
+
+def test_non_continuous_input_raises():
+    data = pd.DataFrame({"X": list("aabbab"), "Y": list("xyxyxy")})
+    with pytest.raises(ValueError, match="continuous"):
         ANM().fit(data)

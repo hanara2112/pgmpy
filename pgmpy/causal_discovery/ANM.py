@@ -1,26 +1,35 @@
+import networkx as nx
 import pandas as pd
+from sklearn.base import clone
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, WhiteKernel
+from sklearn.gaussian_process.kernels import ConstantKernel as C
 
+from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
+from pgmpy.ci_tests import get_ci_test
+from pgmpy.utils import get_dataset_type
 
 
 class ANM(BaseCausalDiscovery):
-    """Bivariate causal discovery with additive noise models.
+    """
+    Bivariate causal discovery using Additive Noise Models (ANM) [1]_.
 
-    The additive noise model assumes that the effect can be written as
-    ``Y = f(X) + N`` where ``N`` is independent of ``X``. The algorithm fits
-    both directions and prefers the one whose regression residuals are
-    independent of the input variable.
+    Given two continuous variables, ANM orients the edge between them by assuming
+    ``effect = f(cause) + noise`` with the noise independent of the cause. It fits
+    a regressor in both directions and picks the one whose residuals are most
+    independent of the input. It always returns a direction; use
+    ``direction_score_`` to judge how confident that call is.
 
     Parameters
     ----------
     regressor : sklearn regressor, default=None
-        Regressor used to estimate ``f``. When ``None``, a
+        Regressor used to estimate ``f``. If ``None``, a
         :class:`~sklearn.gaussian_process.GaussianProcessRegressor` is used.
 
-    ci_test : str or BaseCITest, default=None
-        Independence test applied to the input and the regression residuals.
-        When ``None``, the default continuous-data test from
-        :func:`~pgmpy.ci_tests.get_ci_test` is used.
+    ci_test : str or BaseCITest instance, default=None
+        Independence test between the cause and the residuals. If ``None``, uses
+        ``"gcm"``, which only detects *linear* residual dependence.
 
     random_state : int, default=None
         Random seed for the default regressor.
@@ -28,14 +37,26 @@ class ANM(BaseCausalDiscovery):
     Attributes
     ----------
     causal_graph_ : pgmpy.base.DAG
-        The learned causal graph.
+        The learned causal graph with the single oriented edge.
 
     adjacency_matrix_ : pd.DataFrame
         Adjacency matrix representation of ``causal_graph_``.
 
     direction_score_ : float
-        ``S(Y -> X) - S(X -> Y)`` where ``S`` is the direction score. Positive
-        values mean the forward column order wins.
+        Orientation confidence: ``> 0`` first column causes second, ``< 0`` the
+        reverse, near ``0`` low confidence.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> from pgmpy.causal_discovery import ANM
+    >>> rng = np.random.default_rng(42)
+    >>> x = rng.uniform(-2, 2, 500)
+    >>> df = pd.DataFrame({"X": x, "Y": x**3 + rng.normal(0, 0.5, 500)})
+    >>> anm = ANM(random_state=42).fit(df)
+    >>> anm.causal_graph_.edges()
+    OutEdgeView([('X', 'Y')])
 
     References
     ----------
@@ -55,4 +76,46 @@ class ANM(BaseCausalDiscovery):
         return tags
 
     def _fit(self, X: pd.DataFrame):
-        raise NotImplementedError
+        """Orient the edge between the two variables in ``X`` and set the fitted attributes."""
+        if X.shape[1] != 2:
+            raise ValueError(f"ANM requires exactly two variables, got {X.shape[1]}.")
+
+        if get_dataset_type(X) != "continuous":
+            raise ValueError("ANM requires continuous (numeric) variables; got non-continuous data.")
+
+        x, y = X.columns
+        for col in (x, y):
+            if X[col].std() == 0:
+                raise ValueError(f"Variable '{col}' is constant; ANM requires non-constant variables.")
+
+        score_forward = self._direction_score(X[x], X[y])
+        score_backward = self._direction_score(X[y], X[x])
+        self.direction_score_ = score_backward - score_forward
+
+        edge = (x, y) if self.direction_score_ >= 0 else (y, x)
+        self.causal_graph_ = DAG([edge])
+        self.adjacency_matrix_ = nx.to_pandas_adjacency(self.causal_graph_, nodelist=[x, y], weight=None, dtype="int")
+
+        return self
+
+    def _direction_score(self, cause: pd.Series, effect: pd.Series) -> float:
+        """Regress ``effect`` on ``cause`` and return the cause-residual dependence (lower is more independent)."""
+        if self.regressor is None:
+            # GP kernel form (RBF + Gaussian noise) is from Hoyer et al. (2009); the values are sklearn
+            # defaults as (init, (lower, upper)) bounds for the per-fit hyperparameter optimization:
+            # C = amplitude, RBF = length scale, WhiteKernel = noise variance of N.
+            regressor = GaussianProcessRegressor(
+                kernel=C(1.0, (1e-3, 1e3)) * RBF(1.0, (1e-2, 1e2)) + WhiteKernel(0.1, (1e-10, 1e1)),
+                random_state=self.random_state,
+            )
+        else:
+            regressor = clone(self.regressor)
+
+        cause_2d = cause.to_numpy().reshape(-1, 1)
+        regressor.fit(cause_2d, effect.to_numpy())
+        residual = effect.to_numpy() - regressor.predict(cause_2d)
+
+        resid_data = pd.DataFrame({cause.name: cause.to_numpy(), "_residual": residual})
+        ci_test = get_ci_test(test="gcm" if self.ci_test is None else self.ci_test, data=resid_data)
+        ci_test.run_test(cause.name, "_residual", Z=[])
+        return abs(ci_test.statistic_)
