@@ -43,8 +43,10 @@ class ANM(BaseCausalDiscovery):
         Adjacency matrix representation of ``causal_graph_``.
 
     direction_score_ : float
-        Orientation confidence: ``> 0`` first column causes second, ``< 0`` the
-        reverse, near ``0`` low confidence.
+        Orientation confidence in ``[-1, 1]``: the residual-dependence effect size of
+        the reverse direction minus that of the forward direction. ``> 0`` means the
+        first column causes the second, ``< 0`` the reverse, and values near ``0``
+        mean low confidence.
 
     Examples
     --------
@@ -101,9 +103,7 @@ class ANM(BaseCausalDiscovery):
     def _direction_score(self, cause: pd.Series, effect: pd.Series) -> float:
         """Regress ``effect`` on ``cause`` and return the cause-residual dependence (lower is more independent)."""
         if self.regressor is None:
-            # GP kernel form (RBF + Gaussian noise) is from Hoyer et al. (2009); the values are sklearn
-            # defaults as (init, (lower, upper)) bounds for the per-fit hyperparameter optimization:
-            # C = amplitude, RBF = length scale, WhiteKernel = noise variance of N.
+            # RBF and Gaussian-noise GP kernel (Hoyer et al., 2009); args are (init, (lower, upper)) opt bounds.
             regressor = GaussianProcessRegressor(
                 kernel=C(1.0, (1e-3, 1e3)) * RBF(1.0, (1e-2, 1e2)) + WhiteKernel(0.1, (1e-10, 1e1)),
                 random_state=self.random_state,
@@ -118,4 +118,10 @@ class ANM(BaseCausalDiscovery):
         resid_data = pd.DataFrame({cause.name: cause.to_numpy(), "_residual": residual})
         ci_test = get_ci_test(test="gcm" if self.ci_test is None else self.ci_test, data=resid_data)
         ci_test.run_test(cause.name, "_residual", Z=[])
-        return abs(ci_test.statistic_)
+
+        if ci_test.effect_size_ is None:
+            raise ValueError(
+                f"CI test '{type(ci_test).__name__}' does not expose an effect size, which ANM needs to score "
+                "residual dependence. Use a test that sets effect_size_, such as the default 'gcm'."
+            )
+        return ci_test.effect_size_
