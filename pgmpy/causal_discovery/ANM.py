@@ -28,8 +28,8 @@ class ANM(BaseCausalDiscovery):
         :class:`~sklearn.gaussian_process.GaussianProcessRegressor` is used.
 
     ci_test : str or BaseCITest instance, default=None
-        Independence test between the cause and the residuals. If ``None``, uses
-        ``"gcm"``, which only detects *linear* residual dependence.
+        Independence test between the cause and the residuals; must expose an effect
+        size. If ``None``, uses ``"gcm"``.
 
     random_state : int, default=None
         Random seed for the default regressor.
@@ -78,7 +78,19 @@ class ANM(BaseCausalDiscovery):
         return tags
 
     def _fit(self, X: pd.DataFrame):
-        """Orient the edge between the two variables in ``X`` and set the fitted attributes."""
+        """
+        The fitting procedure for the ANM algorithm.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The data to learn the causal structure from.
+
+        Returns
+        -------
+        self : pgmpy.causal_discovery.ANM
+            Returns the instance with the fitted attributes.
+        """
         if X.shape[1] != 2:
             raise ValueError(f"ANM requires exactly two variables, got {X.shape[1]}.")
 
@@ -101,7 +113,26 @@ class ANM(BaseCausalDiscovery):
         return self
 
     def _direction_score(self, cause: pd.Series, effect: pd.Series) -> float:
-        """Regress ``effect`` on ``cause`` and return the cause-residual dependence (lower is more independent)."""
+        """
+        Score the residual dependence for the ``cause -> effect`` direction.
+
+        Fits the regressor to predict ``effect`` from ``cause``, then measures how dependent the resulting residuals
+        are on ``cause`` using the configured CI test's effect size.
+
+        Parameters
+        ----------
+        cause : pd.Series
+            The candidate cause variable.
+
+        effect : pd.Series
+            The candidate effect variable, regressed on ``cause``.
+
+        Returns
+        -------
+        score : float
+            The CI-test effect size between ``cause`` and the residuals. Lower values indicate more independent
+            residuals, i.e. a better-fitting direction.
+        """
         if self.regressor is None:
             # RBF and Gaussian-noise GP kernel (Hoyer et al., 2009); args are (init, (lower, upper)) opt bounds.
             regressor = GaussianProcessRegressor(
