@@ -4,6 +4,7 @@ from itertools import combinations
 
 import networkx as nx
 import pandas as pd
+from sklearn.base import clone
 
 from pgmpy import config
 from pgmpy.base import DAG
@@ -23,7 +24,6 @@ class ExpertInLoop(BaseCausalDiscovery):
 
     The algorithm can use various sources for edge orientation:
     - A pairwise causal discovery estimator.
-    - Pre-specified orientations
     - Specified `expert_knowledge` argument.
 
     Parameters
@@ -47,13 +47,8 @@ class ExpertInLoop(BaseCausalDiscovery):
     pairwise_estimator : pgmpy.causal_discovery estimator, default=None
         A pairwise causal discovery estimator (e.g. `LLMPairwise`) fit on each
         candidate pair, with the edge read from its `causal_graph_`. Required;
-        used for any pair not already fixed by `orientations` or
+        used for any pair whose direction is not already constrained by
         `expert_knowledge`.
-
-    orientations : set, default=set()
-        A set of edges that will be used as the preferred orientation over
-        the output of `pairwise_estimator`. Edges should be specified as tuples
-        (source, target).
 
     expert_knowledge : ExpertKnowledge, default=None
         Expert knowledge about the causal structure. Can include:
@@ -61,8 +56,12 @@ class ExpertInLoop(BaseCausalDiscovery):
         - required_edges: Edges that must be present in the final model
         - temporal_order: The temporal ordering of variables
 
-        Note: Explicit orientations in the `orientations` parameter take
-        precedence over temporal ordering.
+        The expert knowledge is resolved with ``ExpertKnowledge.fit(data)``,
+        whose fitted ``forbidden_edges_`` fold the temporal order (later-tier to
+        earlier-tier edges are forbidden) and any search space into a single set
+        of forbidden directed edges that constrain orientation. To force a
+        specific orientation ``u -> v``, forbid its reverse with
+        ``ExpertKnowledge(forbidden_edges={(v, u)})``.
 
     show_progress : bool, default=True
         If True, prints information about the running status.
@@ -105,23 +104,14 @@ class ExpertInLoop(BaseCausalDiscovery):
                  pairwise_estimator=AlphabeticalPairwise())
     >>> _ = eil.causal_graph_.edges()
 
-    Using pre-specified orientations:
-
-    `orientations` and `expert_knowledge` override the estimator for the pairs
-    they cover; `pairwise_estimator` orients everything else and is always
-    required:
-
-    >>> orientations = {("Pollution", "Cancer"), ("Smoker", "Cancer")}
-    >>> eil = ExpertInLoop(
-    ...     pairwise_estimator=AlphabeticalPairwise(),
-    ...     orientations=orientations,
-    ...     effect_size_threshold=0.0001,
-    ... )
-    >>> eil.fit(df)  # doctest: +SKIP
-
     Using expert knowledge with temporal ordering:
 
-    >>> from pgmpy.estimators import ExpertKnowledge
+    `expert_knowledge` constrains the orientation for the pairs it covers;
+    `pairwise_estimator` orients everything else and is always required. To
+    force a specific orientation ``u -> v``, forbid its reverse with
+    ``ExpertKnowledge(forbidden_edges={(v, u)})``.
+
+    >>> from pgmpy.causal_discovery import ExpertKnowledge
     >>> expert = ExpertKnowledge(
     ...     temporal_order=[["Pollution", "Smoker"], ["Cancer"], ["Xray", "Dyspnoea"]]
     ... )
@@ -130,10 +120,7 @@ class ExpertInLoop(BaseCausalDiscovery):
     ...     expert_knowledge=expert,
     ...     effect_size_threshold=0.0001,
     ... )
-    >>> eil.fit(df)  # doctest: +ELLIPSIS
-    ExpertInLoop(effect_size_threshold=0.0001,
-                 expert_knowledge=Expert Knowledge: ...,
-                 pairwise_estimator=AlphabeticalPairwise())
+    >>> _ = eil.fit(df)
 
     Using LLM-based orientation through a pairwise estimator (requires API key):
 
@@ -161,7 +148,6 @@ class ExpertInLoop(BaseCausalDiscovery):
         effect_size_threshold: float = 0.05,
         ci_test: str | None = None,
         pairwise_estimator=None,
-        orientations: set[tuple[str, str]] | None = None,
         expert_knowledge=None,
         show_progress: bool = True,
     ):
@@ -169,7 +155,6 @@ class ExpertInLoop(BaseCausalDiscovery):
         self.effect_size_threshold = effect_size_threshold
         self.ci_test = ci_test
         self.pairwise_estimator = pairwise_estimator
-        self.orientations = orientations
         self.expert_knowledge = expert_knowledge
         self.show_progress = show_progress
 
@@ -280,13 +265,18 @@ class ExpertInLoop(BaseCausalDiscovery):
             )
 
         self.variables_ = list(X.columns)
-        orientations = self.orientations if self.orientations is not None else set()
 
-        blacklisted_edges = []
+        # Resolve expert knowledge into forbidden/required edges via a cloned, fit ExpertKnowledge (mirrors `PC`).
+        forbidden_edges = set()
         required_edges = []
         if self.expert_knowledge is not None:
-            blacklisted_edges = list(self.expert_knowledge.forbidden_edges)
-            required_edges = list(self.expert_knowledge.required_edges)
+            expert_knowledge = clone(self.expert_knowledge)
+            expert_knowledge.fit(X)
+            forbidden_edges = expert_knowledge.forbidden_edges_
+            required_edges = list(expert_knowledge.required_edges_)
+
+        # Blacklist of excluded unordered pairs: seeded with pairs forbidden both ways; also grows during the run.
+        blacklist = {frozenset((u, v)) for (u, v) in forbidden_edges if (v, u) in forbidden_edges}
 
         # Initialize the working DAG (seeded with required edges) and the CI test.
         dag = DAG()
@@ -318,17 +308,10 @@ class ExpertInLoop(BaseCausalDiscovery):
                 (nonedge_effects.effect >= self.effect_size_threshold) & (nonedge_effects.p_val <= self.pval_threshold)
             ]
 
-            # Step 3.2: Remove any pair of variables that are blacklisted
-            if len(blacklisted_edges) > 0:
-                blacklisted_edges_us = [edge[0] for edge in blacklisted_edges]
-                blacklisted_edges_vs = [edge[1] for edge in blacklisted_edges]
-                nonedge_effects = nonedge_effects.loc[
-                    ~(
-                        (nonedge_effects.u.isin(blacklisted_edges_us) & nonedge_effects.v.isin(blacklisted_edges_vs))
-                        | (nonedge_effects.u.isin(blacklisted_edges_vs) & nonedge_effects.v.isin(blacklisted_edges_us))
-                    ),
-                    :,
-                ]
+            # Step 3.2: Remove any blacklisted (fully excluded) pair, matching the unordered pair exactly.
+            if blacklist:
+                keep = [frozenset((u, v)) not in blacklist for u, v in zip(nonedge_effects.u, nonedge_effects.v)]
+                nonedge_effects = nonedge_effects[keep]
 
             # Step 3.3: Exit loop if all correlations in data are explained by the model
             if (edge_effects.shape[0] == 0) and (nonedge_effects.shape[0] == 0):
@@ -343,21 +326,16 @@ class ExpertInLoop(BaseCausalDiscovery):
             selected_edge = nonedge_effects.iloc[nonedge_effects.effect.argmax()]
             edge_direction = None
 
-            # Step 3.5: Orient the selected pair, in priority order:
-            #   1. explicit `orientations`
-            #   2. temporal ordering from `expert_knowledge`
-            #   3. the `pairwise_estimator`
+            # Step 3.5: Orient via `forbidden_edges`; fall back to the pairwise estimator when neither dir is forbidden.
             u, v = selected_edge.u, selected_edge.v
 
-            if (u, v) in orientations:
-                edge_direction = (u, v)
-            elif (v, u) in orientations:
+            if (u, v) in forbidden_edges and (v, u) in forbidden_edges:
+                # Both directions forbidden; normally already excluded via `blacklist`.
+                edge_direction = None
+            elif (u, v) in forbidden_edges:
                 edge_direction = (v, u)
-            elif self.expert_knowledge is not None and self.expert_knowledge.temporal_ordering:
-                u_order = self.expert_knowledge.temporal_ordering.get(u)
-                v_order = self.expert_knowledge.temporal_ordering.get(v)
-                if None not in (u_order, v_order) and u_order != v_order:
-                    edge_direction = (u, v) if u_order < v_order else (v, u)
+            elif (v, u) in forbidden_edges:
+                edge_direction = (u, v)
             else:
                 self.pairwise_estimator.fit(X[[u, v]])
                 edges = list(self.pairwise_estimator.causal_graph_.edges())
@@ -375,7 +353,7 @@ class ExpertInLoop(BaseCausalDiscovery):
             # 3. Otherwise, add the edge
             if edge_direction is None:
                 logger.info(f"Orientation returned None for edge {u} - {v}. Skipping this edge.")
-                blacklisted_edges.append((u, v))
+                blacklist.add(frozenset((u, v)))
             elif nx.has_path(dag, edge_direction[1], edge_direction[0]):
                 edges_to_remove = self._break_cycle(
                     dag,
@@ -386,7 +364,7 @@ class ExpertInLoop(BaseCausalDiscovery):
                     effect_size_threshold=self.effect_size_threshold,
                     pval_threshold=self.pval_threshold,
                 )
-                blacklisted_edges.extend(edges_to_remove)
+                blacklist.update(frozenset(e) for e in edges_to_remove)
                 dag.remove_edges_from(edges_to_remove)
                 dag.add_edges_from([(edge_direction[0], edge_direction[1])])
             else:

@@ -141,16 +141,6 @@ def descriptions():
 
 
 @pytest.fixture
-def orientations_small():
-    """Pre-defined orientations for small dataset tests."""
-    return {
-        ("Education", "Income"),
-        ("Race", "Education"),
-        ("Age", "Education"),
-    }
-
-
-@pytest.fixture
 def true_dag_edges():
     """True edges for adult dataset."""
     return [
@@ -208,20 +198,22 @@ def test_estimate(adult_data, true_dag_edges):
     assert nx.is_directed_acyclic_graph(estimator.causal_graph_)
 
 
-def test_estimate_with_orientations(adult_data_small, orientations_small):
-    """Test estimation with pre-specified orientations."""
+def test_forbidden_edge_forces_orientation(adult_data_small):
+    """Forbidding the reverse edge forces the desired orientation (replaces `orientations`)."""
+    desired = {("Education", "Income"), ("Race", "Education"), ("Age", "Education")}
+    expert_knowledge = ExpertKnowledge(forbidden_edges={(v, u) for (u, v) in desired})
     estimator = ExpertInLoop(
         pairwise_estimator=AlphabeticalPairwise(),
-        orientations=orientations_small,
+        expert_knowledge=expert_knowledge,
         pval_threshold=0.1,
         effect_size_threshold=0.1,
         show_progress=False,
     )
     estimator.fit(adult_data_small)
 
-    # Check that pre-specified orientations are present in the graph
-    for edge in orientations_small:
-        assert edge in estimator.causal_graph_.edges(), f"Pre-specified orientation {edge} not found in learned graph"
+    # Each desired orientation is present (its reverse was forbidden).
+    for edge in desired:
+        assert edge in estimator.causal_graph_.edges(), f"Forced orientation {edge} not found in learned graph"
 
 
 def test_estimate_with_custom_pairwise(adult_data_small):
@@ -261,12 +253,51 @@ def test_missing_pairwise_estimator_raises(adult_data_small):
         estimator.fit(adult_data_small)
 
 
-def test_combined_expert_knowledge(adult_data):
-    """Test combination of forbidden edges, required edges, and temporal order."""
+def test_same_tier_uses_pairwise_estimator():
+    """Variables sharing a temporal tier are oriented by the pairwise estimator
+    rather than being silently dropped."""
+    rng = np.random.default_rng(42)
+    n = 500
+    a = rng.integers(0, 2, n)
+    b = a ^ (rng.random(n) < 0.1).astype(int)
+    c = b ^ (rng.random(n) < 0.1).astype(int)
+    data = pd.DataFrame({"A": a, "B": b, "C": c}, dtype="category")
+
+    # A and B share tier 0, so the temporal order cannot orient the A-B edge;
+    # the pairwise estimator must orient it (and AlphabeticalPairwise gives A->B).
+    expert_knowledge = ExpertKnowledge(temporal_order=[["A", "B"], ["C"]])
+    estimator = ExpertInLoop(
+        pairwise_estimator=AlphabeticalPairwise(),
+        expert_knowledge=expert_knowledge,
+        effect_size_threshold=0.01,
+        show_progress=False,
+    )
+    estimator.fit(data)
+
+    assert nx.is_directed_acyclic_graph(estimator.causal_graph_)
+    assert ("A", "B") in estimator.causal_graph_.edges()
+
+
+def test_incomplete_temporal_order_raises(adult_data_small):
+    """A temporal order that does not cover all variables now raises via
+    ExpertKnowledge.fit() instead of silently dropping edges."""
+    expert_knowledge = ExpertKnowledge(temporal_order=[["Age"], ["Education"]])
+    estimator = ExpertInLoop(
+        pairwise_estimator=AlphabeticalPairwise(),
+        expert_knowledge=expert_knowledge,
+        effect_size_threshold=0.1,
+        show_progress=False,
+    )
+    with pytest.raises(ValueError, match="Missing nodes"):
+        estimator.fit(adult_data_small)
+
+
+def test_combined_expert_knowledge(adult_data_small):
+    """Test combination of forbidden edges, required edges, and a complete temporal order."""
     expert_knowledge = ExpertKnowledge(
         forbidden_edges=[("Age", "Income")],
         required_edges=[("Education", "Income")],
-        temporal_order=[["Age", "Race"], ["Education"], ["Income", "HoursPerWeek"]],
+        temporal_order=[["Age", "Race", "Sex"], ["Education"], ["Income"]],
     )
 
     estimator = ExpertInLoop(
@@ -275,37 +306,16 @@ def test_combined_expert_knowledge(adult_data):
         effect_size_threshold=0.0001,
         show_progress=False,
     )
-    estimator.fit(adult_data)
+    estimator.fit(adult_data_small)
 
-    # Check forbidden edges
+    # (Age, Income) is forbidden directly and (Income, Age) by the temporal order, so the pair is dropped.
     assert ("Age", "Income") not in estimator.causal_graph_.edges()
 
-    # Check temporal order
+    # Every edge respects the temporal order.
     for u, v in estimator.causal_graph_.edges():
         u_order = expert_knowledge.temporal_ordering[u]
         v_order = expert_knowledge.temporal_ordering[v]
         assert u_order <= v_order, f"Edge {u}->{v} violates temporal order"
-
-
-def test_edge_orientation_priority(adult_data):
-    """Test that edge orientation follows the correct priority order."""
-    expert_knowledge = ExpertKnowledge(temporal_order=[["Age", "Race"], ["Education"], ["Income", "HoursPerWeek"]])
-
-    # Define orientations that should take precedence over temporal order
-    orientations = {("Income", "Education")}  # Opposite of temporal order
-
-    estimator = ExpertInLoop(
-        pairwise_estimator=AlphabeticalPairwise(),
-        expert_knowledge=expert_knowledge,
-        orientations=orientations,
-        effect_size_threshold=0.0001,
-        show_progress=False,
-    )
-    estimator.fit(adult_data)
-
-    # Check that specified orientations take precedence
-    if ("Income", "Education") in estimator.causal_graph_.edges():
-        assert ("Education", "Income") not in estimator.causal_graph_.edges()
 
 
 def test_fitted_attributes():
