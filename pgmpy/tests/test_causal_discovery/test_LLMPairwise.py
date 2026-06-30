@@ -133,7 +133,7 @@ def test_query_llm(monkeypatch):
     response = LLMPairwise(llm_kwargs={"temperature": 0})._query_llm(messages)
 
     assert response == "1"
-    assert calls == {"model": "gemini/gemini-1.5-flash", "messages": messages, "temperature": 0}
+    assert calls == {"model": "gemini/gemini-2.5-flash", "messages": messages, "temperature": 0}
 
 
 def test_parse_response():

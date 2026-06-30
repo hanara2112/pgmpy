@@ -28,7 +28,7 @@ class LLMPairwise(BaseCausalDiscovery):
     system_prompt : str, default=None
         A system prompt to give the LLM. If ``None``, defaults to ``"You are an expert in Causal Inference"``.
 
-    llm_model : str, default="gemini/gemini-1.5-flash"
+    llm_model : str, default="gemini/gemini-2.5-flash"
         The LLM model to use. This can be any model supported by LiteLLM. Please refer to the LiteLLM documentation
         (https://docs.litellm.ai/docs/providers) for the full list.
 
@@ -99,7 +99,7 @@ class LLMPairwise(BaseCausalDiscovery):
         self,
         descriptions: dict | None = None,
         system_prompt: str | None = None,
-        llm_model: str = "gemini/gemini-1.5-flash",
+        llm_model: str = "gemini/gemini-2.5-flash",
         llm_kwargs: dict | None = None,
         use_cache: bool = True,
     ):

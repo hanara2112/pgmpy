@@ -144,7 +144,7 @@ class ExpertInLoop(BaseCausalDiscovery):
     ... }
     >>> pairwise_estimator = LLMPairwise(
     ...     descriptions=variable_descriptions,
-    ...     llm_model="gemini/gemini-1.5-flash",
+    ...     llm_model="gemini/gemini-2.5-flash",
     ... )
     >>> eil = ExpertInLoop(pairwise_estimator=pairwise_estimator)
     >>> eil.fit(df)  # doctest: +SKIP

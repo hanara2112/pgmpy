@@ -17,7 +17,7 @@ def llm_pairwise_orient(
     y,
     descriptions,
     system_prompt=None,
-    llm_model="gemini/gemini-1.5-flash",
+    llm_model="gemini/gemini-2.5-flash",
     **kwargs,
 ):
     """
@@ -39,10 +39,10 @@ def llm_pairwise_orient(
     system_prompt: str
         A system prompt to give the LLM.
 
-    llm_model: str (default: gemini/gemini-pro)
+    llm_model: str (default: gemini/gemini-2.5-flash)
         The LLM model to use. Please refer to litellm
           documentation (https://docs.litellm.ai/docs/providers)
-        for available model options. Default is gemini-pro.
+        for available model options.
 
     kwargs: kwargs
         Any additional parameters to pass to litellm.completion method.
@@ -177,7 +177,7 @@ class ExpertInLoop(StructureEstimator):
             tries to automatically detect the suitable CI test based on the variable
             types.
 
-        orientation_fn: callable (default: pgmpy.utils.llm_pairwise_orient)
+        orientation_fn: callable (default: pgmpy.estimators.llm_pairwise_orient)
             A function to determine edge orientation. The function should at
             least take two arguments (the names of the two variables) and
             return either a tuple (source, target) representing the directed
@@ -190,11 +190,11 @@ class ExpertInLoop(StructureEstimator):
             - `pgmpy.utils.manual_pairwise_orient`: Prompts the user to specify the direction
               between two variables by presenting options and taking input.
 
-            - `pgmpy.utils.llm_pairwise_orient`: Uses a Large Language Model to determine direction.
+            - `pgmpy.estimators.llm_pairwise_orient`: Uses a Large Language Model to determine direction.
               Requires additional parameters:
 
               * variable_descriptions: dict of {var_name: description} for context
-              * llm_model: name of the LLM model (default: "gemini/gemini-1.5-flash")
+              * llm_model: name of the LLM model (default: "gemini/gemini-2.5-flash")
               * system_prompt: optional custom system prompt
 
             Custom functions can be provided that implement any desired logic
@@ -252,7 +252,7 @@ class ExpertInLoop(StructureEstimator):
         ...     effect_size_threshold=0.0001,
         ...     orientation_fn=llm_pairwise_orient,
         ...     variable_descriptions=variable_descriptions,
-        ...     llm_model="gemini/gemini-1.5-flash",
+        ...     llm_model="gemini/gemini-2.5-flash",
         ... )
         >>> dag.edges()  # doctest: +SKIP
         OutEdgeView([('Smoker', 'Cancer'), ('Cancer', 'Xray'), ('Cancer', 'Dyspnoea'), ('Pollution', 'Cancer')])
