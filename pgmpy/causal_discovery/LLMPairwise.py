@@ -132,22 +132,31 @@ class LLMPairwise(BaseCausalDiscovery):
         cache_key = frozenset((x, y))
         cache = self.__dict__.setdefault("_orientation_cache", {})
 
-        # Step 2: Reuse a previously oriented pair instead of re-querying the LLM.
+        # Step 2: Query the LLM for the causal direction.
+        # Step 2.1: Check if the edge has already been oriented and cached.
         if self.use_cache and cache_key in cache:
-            source, target = cache[cache_key]
+            cached = cache[cache_key]
+            self.llm_model_ = cached["llm_model"]
+            self.llm_prompt_ = cached["llm_prompt"]
+            self.llm_response_ = cached["llm_response"]
+            source, target = cached["edge"]
         else:
-            # Step 3: Build the prompt, query the LLM, and parse the chosen direction.
+            # Step 2.2: Else, build the prompt, and query the LLM.
             self.llm_model_ = self.llm_model
             self.llm_prompt_ = self._build_prompt(x, y)
             self.llm_response_ = self._query_llm(self.llm_prompt_)
             source, target = self._parse_response(self.llm_response_, x, y)
             if self.use_cache:
-                cache[cache_key] = (source, target)
+                cache[cache_key] = {
+                    "llm_model": self.llm_model_,
+                    "llm_prompt": self.llm_prompt_,
+                    "llm_response": self.llm_response_,
+                    "edge": (source, target),
+                }
 
-        # Step 4: Build the causal graph and store the fitted attributes.
-        dag = DAG([(source, target)])
-        self.causal_graph_ = dag
-        self.adjacency_matrix_ = nx.to_pandas_adjacency(dag, nodelist=[x, y], weight=None, dtype="int")
+        # Step 3: Build the causal graph and store the fitted attributes.
+        self.causal_graph_ = DAG([(source, target)])
+        self.adjacency_matrix_ = nx.to_pandas_adjacency(self.causal_graph_, nodelist=[x, y], weight=None, dtype="int")
 
         return self
 
