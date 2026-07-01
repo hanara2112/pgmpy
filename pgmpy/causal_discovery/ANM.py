@@ -15,11 +15,19 @@ class ANM(BaseCausalDiscovery):
     """
     Bivariate causal discovery using Additive Noise Models (ANM) [1]_.
 
-    Given two continuous variables, ANM orients the edge between them by assuming
-    ``effect = f(cause) + noise`` with the noise independent of the cause. It fits
-    a regressor in both directions and picks the one whose residuals are most
-    independent of the input. It always returns a direction; use
-    ``direction_score_`` to judge how confident that call is.
+    Given two continuous variables, ANM orients the edge between them under the additive
+    noise model ``effect = f(cause) + noise``, assuming:
+
+    - the noise is statistically independent of the cause;
+    - the relationship is nonlinear and/or the noise is non-Gaussian, so that no valid
+      additive-noise model exists in the reverse direction (the linear-Gaussian case is
+      not identifiable);
+    - the two variables are genuinely causally related -- ANM only orients the edge, it
+      does not test whether one exists.
+
+    It fits a regressor in both directions and orients the edge toward the one whose
+    residuals are more independent of the input. Compare ``forward_score_`` and
+    ``backward_score_`` to judge how decisive that call is.
 
     Parameters
     ----------
@@ -42,11 +50,19 @@ class ANM(BaseCausalDiscovery):
     adjacency_matrix_ : pd.DataFrame
         Adjacency matrix representation of ``causal_graph_``.
 
-    direction_score_ : float
-        Orientation confidence in ``[-1, 1]``: the residual-dependence effect size of
-        the reverse direction minus that of the forward direction. ``> 0`` means the
-        first column causes the second, ``< 0`` the reverse, and values near ``0``
-        mean low confidence.
+    forward_score_ : float
+        Residual-dependence score for the first-column -> second-column direction. A
+        smaller absolute value means the residuals are more independent of the cause.
+
+    backward_score_ : float
+        Residual-dependence score for the second-column -> first-column direction. The
+        edge is oriented toward whichever direction has the smaller absolute score.
+
+    n_features_in_ : int
+        The number of features in the data used to learn the causal graph.
+
+    feature_names_in_ : np.ndarray
+        The feature names in the data used to learn the causal graph.
 
     Examples
     --------
@@ -97,16 +113,15 @@ class ANM(BaseCausalDiscovery):
         if get_dataset_type(X) != "continuous":
             raise ValueError("ANM requires continuous (numeric) variables; got non-continuous data.")
 
-        x, y = X.columns
+        x, y = self.feature_names_in_
         for col in (x, y):
             if X[col].std() == 0:
                 raise ValueError(f"Variable '{col}' is constant; ANM requires non-constant variables.")
 
-        score_forward = self._direction_score(X[x], X[y])
-        score_backward = self._direction_score(X[y], X[x])
-        self.direction_score_ = score_backward - score_forward
+        self.forward_score_ = self._direction_score(cause=X[x], effect=X[y])
+        self.backward_score_ = self._direction_score(cause=X[y], effect=X[x])
 
-        edge = (x, y) if self.direction_score_ >= 0 else (y, x)
+        edge = (x, y) if abs(self.forward_score_) <= abs(self.backward_score_) else (y, x)
         self.causal_graph_ = DAG([edge])
         self.adjacency_matrix_ = nx.to_pandas_adjacency(self.causal_graph_, nodelist=[x, y], weight=None, dtype="int")
 
@@ -130,8 +145,8 @@ class ANM(BaseCausalDiscovery):
         Returns
         -------
         score : float
-            The CI-test effect size between ``cause`` and the residuals. Lower values indicate more independent
-            residuals, i.e. a better-fitting direction.
+            The CI-test effect size between ``cause`` and the residuals. A smaller absolute value indicates more
+            independent residuals, i.e. a better-fitting direction.
         """
         if self.regressor is None:
             # RBF and Gaussian-noise GP kernel (Hoyer et al., 2009); args are (init, (lower, upper)) opt bounds.

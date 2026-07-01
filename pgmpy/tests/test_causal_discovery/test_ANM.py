@@ -24,22 +24,28 @@ def test_fit_recovers_direction():
     est = ANM(random_state=0).fit(data)
 
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
-    assert est.direction_score_ > 0
+    assert est.forward_score_ == pytest.approx(0.0003224986489045623, rel=1e-4)
+    assert est.backward_score_ == pytest.approx(0.003947076565539923, rel=1e-4)
+    assert est.forward_score_ < est.backward_score_
     assert est.adjacency_matrix_.loc["X", "Y"] == 1
     assert est.adjacency_matrix_.loc["Y", "X"] == 0
 
 
 def test_reproducible():
     data = _nonlinear_data()
-    score1 = ANM(random_state=0).fit(data).direction_score_
-    score2 = ANM(random_state=0).fit(data).direction_score_
-    assert score1 == score2
+    est1 = ANM(random_state=0).fit(data)
+    est2 = ANM(random_state=0).fit(data)
+    assert est1.forward_score_ == est2.forward_score_
+    assert est1.backward_score_ == est2.backward_score_
 
 
 def test_regressor_and_ci_test_override():
     data = _nonlinear_data()
     est = ANM(regressor=LinearRegression(), ci_test="gcm", random_state=0).fit(data)
-    assert list(est.causal_graph_.edges())[0] in [("X", "Y"), ("Y", "X")]
+    # A linear regressor cannot capture Y = X**3, so gcm finds near-zero residual
+    # dependence in both directions (no direction is meaningfully preferred).
+    assert est.forward_score_ == pytest.approx(0.0, abs=1e-9)
+    assert est.backward_score_ == pytest.approx(0.0, abs=1e-9)
 
 
 def test_constant_input_raises():
