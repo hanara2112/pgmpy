@@ -15,29 +15,27 @@ class ANM(BaseCausalDiscovery):
     """
     Bivariate causal discovery using Additive Noise Models (ANM) [1]_.
 
-    Given two continuous variables, ANM orients the edge between them under the additive
-    noise model ``effect = f(cause) + noise``, assuming:
+    Given two continuous variables, ANM orients the edge between them under the additive noise model
+    ``effect = f(cause) + noise``, assuming:
 
     - the noise is statistically independent of the cause;
-    - the relationship is nonlinear and/or the noise is non-Gaussian, so that no valid
-      additive-noise model exists in the reverse direction (the linear-Gaussian case is
-      not identifiable);
-    - the two variables are genuinely causally related -- ANM only orients the edge, it
-      does not test whether one exists.
+    - the relationship is nonlinear and/or the noise is non-Gaussian, so that no valid additive-noise model exists in
+      the reverse direction (the linear-Gaussian case is not identifiable);
+    - the two variables are genuinely causally related (ANM only orients the edge; it does not test whether one
+      exists).
 
-    It fits a regressor in both directions and orients the edge toward the one whose
-    residuals are more independent of the input. Compare ``forward_score_`` and
-    ``backward_score_`` to judge how decisive that call is.
+    It fits a regressor in both directions and orients the edge toward the one whose residuals are more independent of
+    the input. Compare ``forward_score_`` and ``backward_score_`` to judge how decisive that call is.
 
     Parameters
     ----------
     regressor : sklearn regressor, default=None
-        Regressor used to estimate ``f``. If ``None``, a
-        :class:`~sklearn.gaussian_process.GaussianProcessRegressor` is used.
+        Regressor used to estimate ``f``. If ``None``, a :class:`~sklearn.gaussian_process.GaussianProcessRegressor`
+        is used.
 
     ci_test : str or BaseCITest instance, default=None
-        Independence test between the cause and the residuals; must expose an effect
-        size. If ``None``, uses ``"gcm"``.
+        Independence test between the cause and the residuals; must expose an effect size. If ``None``, a default test
+        is chosen automatically from the data type.
 
     random_state : int, default=None
         Random seed for the default regressor.
@@ -51,12 +49,12 @@ class ANM(BaseCausalDiscovery):
         Adjacency matrix representation of ``causal_graph_``.
 
     forward_score_ : float
-        Residual-dependence score for the first-column -> second-column direction. A
-        smaller absolute value means the residuals are more independent of the cause.
+        Residual-dependence score for the first-column -> second-column direction. A smaller absolute value means the
+        residuals are more independent of the cause.
 
     backward_score_ : float
-        Residual-dependence score for the second-column -> first-column direction. The
-        edge is oriented toward whichever direction has the smaller absolute score.
+        Residual-dependence score for the second-column -> first-column direction. The edge is oriented toward
+        whichever direction has the smaller absolute score.
 
     n_features_in_ : int
         The number of features in the data used to learn the causal graph.
@@ -118,8 +116,8 @@ class ANM(BaseCausalDiscovery):
             if X[col].std() == 0:
                 raise ValueError(f"Variable '{col}' is constant; ANM requires non-constant variables.")
 
-        self.forward_score_ = self._direction_score(cause=X[x], effect=X[y])
-        self.backward_score_ = self._direction_score(cause=X[y], effect=X[x])
+        self.forward_score_ = self._direction_score(cause=X[[x]], effect=X[y])
+        self.backward_score_ = self._direction_score(cause=X[[y]], effect=X[x])
 
         edge = (x, y) if abs(self.forward_score_) <= abs(self.backward_score_) else (y, x)
         self.causal_graph_ = DAG([edge])
@@ -127,7 +125,7 @@ class ANM(BaseCausalDiscovery):
 
         return self
 
-    def _direction_score(self, cause: pd.Series, effect: pd.Series) -> float:
+    def _direction_score(self, cause: pd.DataFrame, effect: pd.Series) -> float:
         """
         Score the residual dependence for the ``cause -> effect`` direction.
 
@@ -136,8 +134,8 @@ class ANM(BaseCausalDiscovery):
 
         Parameters
         ----------
-        cause : pd.Series
-            The candidate cause variable.
+        cause : pd.DataFrame
+            The candidate cause variable, as a single-column frame (the regressor's 2D input).
 
         effect : pd.Series
             The candidate effect variable, regressed on ``cause``.
@@ -157,17 +155,17 @@ class ANM(BaseCausalDiscovery):
         else:
             regressor = clone(self.regressor)
 
-        cause_2d = cause.to_numpy().reshape(-1, 1)
-        regressor.fit(cause_2d, effect.to_numpy())
-        residual = effect.to_numpy() - regressor.predict(cause_2d)
+        regressor.fit(cause, effect)
+        residual = effect - regressor.predict(cause)
 
-        resid_data = pd.DataFrame({cause.name: cause.to_numpy(), "_residual": residual})
-        ci_test = get_ci_test(test="gcm" if self.ci_test is None else self.ci_test, data=resid_data)
-        ci_test.run_test(cause.name, "_residual", Z=[])
+        cause_name = cause.columns[0]
+        resid_data = cause.assign(_residual=residual)
+        ci_test = get_ci_test(test=self.ci_test, data=resid_data)
+        ci_test.run_test(cause_name, "_residual", Z=[])
 
         if ci_test.effect_size_ is None:
             raise ValueError(
                 f"CI test '{type(ci_test).__name__}' does not expose an effect size, which ANM needs to score "
-                "residual dependence. Use a test that sets effect_size_, such as the default 'gcm'."
+                "residual dependence. Use a test that sets effect_size_, such as 'pearsonr' or 'gcm'."
             )
         return ci_test.effect_size_
