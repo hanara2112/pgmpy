@@ -6,7 +6,7 @@ from pgmpy.causal_discovery import ANM
 
 
 @pytest.fixture
-def nonlinear_data(n=500):
+def nonlinear_data(n=1000):
     """Generate additive-noise data with X -> Y, where Y = X ** 3 + noise."""
     rng = np.random.default_rng(0)
     x = rng.uniform(-2, 2, n)
