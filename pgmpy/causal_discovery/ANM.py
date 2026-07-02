@@ -26,7 +26,8 @@ class ANM(BaseCausalDiscovery):
     ----------
     regressor : sklearn regressor, default=None
         Regressor used to estimate ``f``. If ``None``, a :class:`~sklearn.gaussian_process.GaussianProcessRegressor`
-        is used.
+        with an RBF plus white-noise kernel is used, with the input and target standardized so that the unit-scale
+        kernel initialization is appropriate regardless of the scale of the data.
 
     ci_test : str or BaseCITest instance, default=None
         Independence test between the cause and the residuals. If ``None``, a default test is chosen automatically based
@@ -66,9 +67,9 @@ class ANM(BaseCausalDiscovery):
     >>> anm.causal_graph_.edges()
     OutEdgeView([('X', 'Y')])
     >>> anm.forward_score_.round(5)
-    np.float64(0.00037)
+    np.float64(0.00104)
     >>> anm.backward_score_.round(5)
-    np.float64(0.00455)
+    np.float64(0.00543)
 
     References
     ----------
@@ -144,14 +145,17 @@ class ANM(BaseCausalDiscovery):
             independent residuals, i.e. a better-fitting direction.
         """
         if self.regressor is None:
-            # RBF and Gaussian-noise GP kernel (Hoyer et al., 2009); args are (init, (lower, upper)) opt bounds.
-
             from sklearn.gaussian_process import GaussianProcessRegressor
-            from sklearn.gaussian_process.kernels import RBF, WhiteKernel
-            from sklearn.gaussian_process.kernels import ConstantKernel as C
+            from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
+            from sklearn.pipeline import make_pipeline
+            from sklearn.preprocessing import StandardScaler
 
-            regressor = GaussianProcessRegressor(
-                kernel=C(1.0, (1e-3, 1e3)) * RBF(1.0, (1e-2, 1e2)) + WhiteKernel(0.1, (1e-10, 1e1)),
+            regressor = make_pipeline(
+                StandardScaler(),
+                GaussianProcessRegressor(
+                    kernel=ConstantKernel(1.0, (1e-3, 1e3)) * RBF(1.0, (1e-2, 1e2)) + WhiteKernel(0.1, (1e-10, 1e1)),
+                    normalize_y=True,
+                ),
             )
         else:
             regressor = clone(self.regressor)

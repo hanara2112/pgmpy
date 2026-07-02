@@ -24,8 +24,8 @@ def test_fit_recovers_direction(nonlinear_data):
     est = ANM().fit(data)
 
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
-    assert est.forward_score_ == pytest.approx(0.0003224986489045543, rel=1e-4)
-    assert est.backward_score_ == pytest.approx(0.003947076565539921, rel=1e-4)
+    assert est.forward_score_ == pytest.approx(0.00027103171629108734, rel=1e-4)
+    assert est.backward_score_ == pytest.approx(0.002179257501560248, rel=1e-4)
     assert est.forward_score_ < est.backward_score_
     assert est.adjacency_matrix_.loc["X", "Y"] == 1
     assert est.adjacency_matrix_.loc["Y", "X"] == 0
