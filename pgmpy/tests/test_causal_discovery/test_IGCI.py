@@ -15,7 +15,11 @@ def _near_deterministic_data(n=500, seed=0):
 
 def test_init():
     est = IGCI(scoring="slope", ref_measure="uniform")
-    assert est.get_params() == {"scoring": "slope", "ref_measure": "uniform"}
+    assert est.get_params() == {
+        "scoring": "slope",
+        "ref_measure": "uniform",
+        "entropy_method": "auto",
+    }
 
 
 def test_fit_recovers_direction():
@@ -43,6 +47,11 @@ def test_estimators_recover_direction(scoring, ref_measure):
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
 
 
+def test_spacing_entropy_recovers_direction():
+    est = IGCI(scoring="entropy", entropy_method="spacing").fit(_near_deterministic_data())
+    assert list(est.causal_graph_.edges()) == [("X", "Y")]
+
+
 def test_tied_observations_recover_direction():
     # Repeated X values (rounded to 2 decimals) must not break the estimators.
     rng = np.random.default_rng(1)
@@ -60,6 +69,7 @@ def test_tied_observations_recover_direction():
     [
         (IGCI(scoring="bogus"), _near_deterministic_data(n=50), "scoring"),
         (IGCI(ref_measure="bogus"), _near_deterministic_data(n=50), "ref_measure"),
+        (IGCI(scoring="entropy", entropy_method="bogus"), _near_deterministic_data(n=50), "entropy_method"),
         (IGCI(), pd.DataFrame({"X": [1.0, 1.0, 1.0], "Y": [1.0, 2.0, 3.0]}), "constant"),
         (IGCI(), pd.DataFrame({"X": [0.0, 1.0, 2.0], "Y": [1.0, 2.0, 3.0], "Z": [2.0, 1.0, 0.0]}), "exactly two"),
         (IGCI(), pd.DataFrame({"X": [0.0, 1.0, np.nan], "Y": [1.0, 2.0, 3.0]}), None),

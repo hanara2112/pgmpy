@@ -1,11 +1,22 @@
 import networkx as nx
 import numpy as np
 import pandas as pd
-from scipy.special import digamma
+from scipy.stats import differential_entropy
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
 from pgmpy.utils import get_dataset_type
+
+_ENTROPY_METHODS = ("spacing", "vasicek", "ebrahimi", "van es", "correa", "auto")
+
+
+def _spacing_entropy(x: np.ndarray) -> float:
+    """1-spacing differential entropy estimate on sorted samples."""
+    spacings = np.diff(np.sort(x))
+    spacings = spacings[spacings > 0]
+    if spacings.size == 0:
+        raise ValueError("Spacing entropy requires at least two distinct observations.")
+    return np.log(spacings.size) + np.mean(np.log(spacings))
 
 
 class IGCI(BaseCausalDiscovery):
@@ -15,47 +26,41 @@ class IGCI(BaseCausalDiscovery):
     Given two continuous variables, IGCI orients the edge between them under the
     deterministic, invertible model ``Y = f(X)``, assuming:
 
-    - Causal sufficiency (no unobserved confounders);
-    - The mechanism ``f`` is deterministic and invertible (monotonic), which holds
-      only approximately under low observation noise;
-    - The cause distribution and the mechanism ``f`` are chosen independently, so
-      the density of the cause carries no information about ``f``.
+    - No unobserved confounders.
+    - ``Y = f(X)`` is monotonic and close to deterministic (little noise).
+    - The cause distribution and ``f`` are independent.
 
-    For each ordering it estimates the IGCI objective implied by this
-    independent-mechanism assumption and orients the edge toward the smaller
-    score. A direction is always returned; on a tie it falls back to the first
-    column ordering.
+    IGCI scores each direction and orients toward the lower score. Ties use the
+    first column as cause.
 
     Parameters
     ----------
     scoring : str, default="slope"
-        Estimator used for the per-direction score. Options are:
-
-        - ``"slope"``: mean log absolute finite-difference slope between consecutive
-          observations, a finite-difference approximation to the mean of ``log |f'|``.
-        - ``"entropy"``: difference of the empirical differential entropies.
+        How each direction is scored. slope uses the mean log of absolute slopes
+        between consecutive points. entropy uses the difference in differential
+        entropy estimates.
 
     ref_measure : str, default="uniform"
-        Reference measure the data is normalized to before scoring. Options are:
+        Preprocessing before scoring. uniform scales each variable to [0, 1].
+        gaussian standardizes to zero mean and unit variance.
 
-        - ``"uniform"``: rescale each variable to ``[0, 1]``.
-        - ``"gaussian"``: standardize each variable to zero mean and unit variance.
+    entropy_method : str, default="auto"
+        Kernel passed to scipy.stats.differential_entropy when scoring is
+        entropy. One of vasicek, ebrahimi, van es, correa, or auto.
 
     Attributes
     ----------
     causal_graph_ : pgmpy.base.DAG
-        The learned causal graph with the single oriented edge.
+        Learned graph with the single oriented edge.
 
     adjacency_matrix_ : pd.DataFrame
-        Adjacency matrix representation of ``causal_graph_``.
+        Adjacency matrix of causal_graph_.
 
     forward_score_ : float
-        IGCI score for the first-column -> second-column direction. A smaller
-        score means that direction better matches the IGCI assumption.
+        Score when the first column is treated as cause. Lower is better.
 
     backward_score_ : float
-        IGCI score for the second-column -> first-column direction. The edge is
-        oriented toward whichever direction has the smaller score.
+        Score for the second column as cause. Lower is better.
 
     n_features_in_ : int
         The number of features in the data used to learn the causal graph.
@@ -85,115 +90,90 @@ class IGCI(BaseCausalDiscovery):
 
     """
 
-    def __init__(self, scoring="slope", ref_measure="uniform"):
+    def __init__(self, scoring="slope", ref_measure="uniform", entropy_method="auto"):
         self.scoring = scoring
         self.ref_measure = ref_measure
+        self.entropy_method = entropy_method
 
     def __sklearn_tags__(self):
         tags = super().__sklearn_tags__()
         tags.input_tags.categorical = False
         return tags
 
+    def _direction_score(self, cause: np.ndarray, effect: np.ndarray) -> float:
+        """Return the IGCI score for the ``cause -> effect`` ordering."""
+        if self.scoring == "slope":
+            order = np.argsort(cause, kind="stable")
+            dc = np.diff(cause[order])
+            de = np.diff(effect[order])
+            mask = (dc != 0) & (de != 0)
+            if not mask.any():
+                raise ValueError(
+                    "IGCI requires sufficiently distinct continuous observations; no valid pairs remained."
+                )
+            return np.mean(np.log(np.abs(de[mask] / dc[mask])))
+
+        if self.entropy_method == "spacing":
+            h_effect = _spacing_entropy(effect)
+            h_cause = _spacing_entropy(cause)
+        else:
+            h_effect = differential_entropy(effect, method=self.entropy_method)
+            h_cause = differential_entropy(cause, method=self.entropy_method)
+        if not np.isfinite(h_effect) or not np.isfinite(h_cause):
+            raise ValueError(f"Entropy estimation with method {self.entropy_method!r} failed for the given sample.")
+        return h_effect - h_cause
+
     def _fit(self, X: pd.DataFrame):
         """
-        The fitting procedure for the IGCI algorithm.
+        Orient the edge between the two variables in ``X`` using IGCI.
 
         Parameters
         ----------
         X : pd.DataFrame
-            The data to learn the causal structure from.
+            The data to learn the causal structure from. Must contain exactly
+            two continuous variables.
 
         Returns
         -------
-        self : pgmpy.causal_discovery.IGCI
-            Returns the instance with the fitted attributes.
+        self : IGCI
+            Returns the instance with the fitted attributes set.
         """
-        # Step 0: Validate the inputs.
+        # Step 1: Validate hyperparameters.
+        if self.scoring not in ("slope", "entropy"):
+            raise ValueError(f"scoring must be one of ('slope', 'entropy'). Got: {self.scoring!r}")
+        if self.ref_measure not in ("uniform", "gaussian"):
+            raise ValueError(f"ref_measure must be one of ('uniform', 'gaussian'). Got: {self.ref_measure!r}")
+        if self.scoring == "entropy" and self.entropy_method not in _ENTROPY_METHODS:
+            raise ValueError(f"entropy_method must be one of {_ENTROPY_METHODS}. Got: {self.entropy_method!r}")
+
+        # Step 2: Validate the input data.
         if X.shape[1] != 2:
             raise ValueError(f"IGCI requires exactly two variables, got {X.shape[1]}.")
-
         if get_dataset_type(X) != "continuous":
             raise ValueError("IGCI requires continuous (numeric) variables; got non-continuous data.")
-
-        for param, allowed in (("scoring", ("slope", "entropy")), ("ref_measure", ("uniform", "gaussian"))):
-            value = getattr(self, param)
-            if value not in allowed:
-                raise ValueError(f"{param} must be one of {allowed}. Got: {value!r}")
 
         x, y = self.feature_names_in_
         for col in (x, y):
             if X[col].std() == 0:
                 raise ValueError(f"Variable '{col}' is constant; IGCI requires non-constant variables.")
 
-        # Step 1: Normalize each variable and score both directions.
-        x_norm = self._normalize(X[x].to_numpy(dtype=float))
-        y_norm = self._normalize(X[y].to_numpy(dtype=float))
+        # Step 3: Normalize each variable to the reference measure.
+        x_vals = X[x].to_numpy(dtype=float)
+        y_vals = X[y].to_numpy(dtype=float)
+        if self.ref_measure == "uniform":
+            x_norm = (x_vals - x_vals.min()) / (x_vals.max() - x_vals.min())
+            y_norm = (y_vals - y_vals.min()) / (y_vals.max() - y_vals.min())
+        else:
+            x_norm = (x_vals - x_vals.mean()) / x_vals.std()
+            y_norm = (y_vals - y_vals.mean()) / y_vals.std()
+
+        # Step 4: Score both directions.
         self.forward_score_ = self._direction_score(cause=x_norm, effect=y_norm)
         self.backward_score_ = self._direction_score(cause=y_norm, effect=x_norm)
 
-        # Step 2: Orient the edge toward the direction with the smaller score.
+        # Step 5: Orient the edge and store the fitted attributes.
         edge = (x, y) if self.forward_score_ <= self.backward_score_ else (y, x)
         self.causal_graph_ = DAG([edge])
         self.adjacency_matrix_ = nx.to_pandas_adjacency(self.causal_graph_, nodelist=[x, y], weight=None, dtype="int")
 
         return self
-
-    def _normalize(self, values: np.ndarray) -> np.ndarray:
-        """Normalize a variable according to the configured reference measure."""
-        if self.ref_measure == "uniform":
-            return (values - values.min()) / (values.max() - values.min())
-        return (values - values.mean()) / values.std()
-
-    def _direction_score(self, cause: np.ndarray, effect: np.ndarray) -> float:
-        """
-        Estimate the IGCI objective for the ``cause -> effect`` ordering; a smaller score favors that direction.
-
-        The estimator is selected by ``scoring`` (see the class docstring). The ``"slope"`` variant sorts by ``cause``
-        and ignores pairs whose finite differences vanish.
-
-        Parameters
-        ----------
-        cause : np.ndarray
-            The normalized candidate cause variable.
-
-        effect : np.ndarray
-            The normalized candidate effect variable.
-
-        Returns
-        -------
-        score : float
-            The IGCI score for the ``cause -> effect`` direction. A smaller value indicates a better-fitting direction.
-        """
-        if self.scoring == "entropy":
-            return self._entropy(effect) - self._entropy(cause)
-
-        order = np.argsort(cause, kind="stable")
-        cause_sorted, effect_sorted = cause[order], effect[order]
-        dc = np.diff(cause_sorted)
-        de = np.diff(effect_sorted)
-        mask = (dc != 0) & (de != 0)
-        if not mask.any():
-            raise ValueError("IGCI requires sufficiently distinct continuous observations; no valid pairs remained.")
-        return np.mean(np.log(np.abs(de[mask] / dc[mask])))
-
-    @staticmethod
-    def _entropy(values: np.ndarray) -> float:
-        """
-        Estimate the differential entropy of a variable.
-
-        Uses the 1-spacing (nearest-neighbor) estimator on the sorted values. Duplicate values are removed first, as
-        repeated observations would otherwise send the estimate to negative infinity.
-
-        Parameters
-        ----------
-        values : np.ndarray
-            The (normalized) variable to estimate the entropy of.
-
-        Returns
-        -------
-        entropy : float
-            The estimated differential entropy.
-        """
-        unique_values = np.unique(values)
-        n = len(unique_values)
-        return np.sum(np.log(np.diff(unique_values))) / (n - 1) + digamma(n) - digamma(1)
