@@ -66,7 +66,8 @@ class ANM(BaseCausalDiscovery):
     --------
     >>> import numpy as np
     >>> import pandas as pd
-    >>> from pgmpy.causal_discovery import ANM, EntropyScore
+    >>> from pgmpy.causal_discovery import ANM
+    >>> from pgmpy.causal_discovery.anm_scores import EntropyScore
     >>> rng = np.random.default_rng(42)
     >>> x = rng.uniform(-2, 2, 500)
     >>> df = pd.DataFrame({"X": x, "Y": x**3 + rng.laplace(size=500)})
