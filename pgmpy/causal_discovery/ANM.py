@@ -1,10 +1,11 @@
 import networkx as nx
+import numpy as np
 import pandas as pd
 from sklearn.base import clone
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
-from pgmpy.ci_tests import get_ci_test
+from pgmpy.causal_discovery.anm_scores import get_anm_score
 from pgmpy.utils import get_dataset_type
 
 
@@ -29,9 +30,15 @@ class ANM(BaseCausalDiscovery):
         with an RBF plus white-noise kernel is used, with the input and target standardized so that the unit-scale
         kernel initialization is appropriate regardless of the scale of the data.
 
-    ci_test : str or BaseCITest instance, default=None
-        Independence test between the cause and the residuals. If ``None``, a default test is chosen automatically based
-        on the data.
+    score : str, BaseANMScore instance, or callable, default="independence"
+        How a candidate direction is scored from the cause and the regression residuals. A smaller score means the
+        residuals are more independent of the cause, i.e. a better-fitting direction. One of:
+
+        - a built-in name -- ``"independence"`` (a CI-test effect size, the default;
+          :class:`~pgmpy.causal_discovery.IndependenceScore` with ``"pearsonr"``), ``"entropy"``
+          (:class:`~pgmpy.causal_discovery.EntropyScore`), or ``"gauss"`` (:class:`~pgmpy.causal_discovery.GaussScore`);
+        - a configured :class:`~pgmpy.causal_discovery.BaseANMScore` instance, e.g. ``EntropyScore(method="vasicek")``;
+        - any callable of the form ``fn(cause, residual) -> float``.
 
     Attributes
     ----------
@@ -42,12 +49,12 @@ class ANM(BaseCausalDiscovery):
         Adjacency matrix representation of ``causal_graph_``.
 
     forward_score_ : float
-        Residual-dependence score for the first-column -> second-column direction. A smaller absolute value means the
-        residuals are more independent of the cause.
+        Direction score for the first-column -> second-column direction, as computed by ``score``. A smaller value
+        means the residuals are more independent of the cause.
 
     backward_score_ : float
-        Residual-dependence score for the second-column -> first-column direction. The edge is oriented toward
-        whichever direction has the smaller absolute score.
+        Direction score for the second-column -> first-column direction. The edge is oriented toward whichever
+        direction has the smaller score.
 
     n_features_in_ : int
         The number of features in the data used to learn the causal graph.
@@ -59,7 +66,7 @@ class ANM(BaseCausalDiscovery):
     --------
     >>> import numpy as np
     >>> import pandas as pd
-    >>> from pgmpy.causal_discovery import ANM
+    >>> from pgmpy.causal_discovery import ANM, EntropyScore
     >>> rng = np.random.default_rng(42)
     >>> x = rng.uniform(-2, 2, 500)
     >>> df = pd.DataFrame({"X": x, "Y": x**3 + rng.laplace(size=500)})
@@ -71,15 +78,26 @@ class ANM(BaseCausalDiscovery):
     >>> anm.backward_score_.round(5)
     np.float64(0.00543)
 
+    The scoring method can be selected by name:
+
+    >>> ANM(score="entropy").fit(df).causal_graph_.edges()
+    OutEdgeView([('X', 'Y')])
+
+    or passed as an object for full control over its hyperparameters:
+
+    >>> ANM(score=EntropyScore(method="vasicek")).fit(df).causal_graph_.edges()
+    OutEdgeView([('X', 'Y')])
+
     References
     ----------
     - :cite:p:`hoyer_2008`
+    - :cite:p:`mooij_2016`
 
     """
 
-    def __init__(self, regressor=None, ci_test=None):
+    def __init__(self, regressor=None, score="independence"):
         self.regressor = regressor
-        self.ci_test = ci_test
+        self.score = score
 
     def __sklearn_tags__(self):
         tags = super().__sklearn_tags__()
@@ -116,8 +134,8 @@ class ANM(BaseCausalDiscovery):
         self.forward_score_ = self._direction_score(cause=X[[x]], effect=X[y])
         self.backward_score_ = self._direction_score(cause=X[[y]], effect=X[x])
 
-        # Step 2: Orient the edge toward the direction with the smaller absolute score.
-        edge = (x, y) if abs(self.forward_score_) <= abs(self.backward_score_) else (y, x)
+        # Step 2: Orient the edge toward the direction with the smaller score.
+        edge = (x, y) if self.forward_score_ <= self.backward_score_ else (y, x)
         self.causal_graph_ = DAG([edge])
         self.adjacency_matrix_ = nx.to_pandas_adjacency(self.causal_graph_, nodelist=[x, y], weight=None, dtype="int")
 
@@ -127,8 +145,8 @@ class ANM(BaseCausalDiscovery):
         """
         Score the residual dependence for the ``cause -> effect`` direction.
 
-        Fits the regressor to predict ``effect`` from ``cause``, then measures how dependent the resulting residuals
-        are on ``cause`` using the configured CI test's effect size.
+        Fits the regressor to predict ``effect`` from ``cause``, then scores how dependent the resulting residuals
+        are on ``cause`` using the configured ``score``.
 
         Parameters
         ----------
@@ -141,8 +159,8 @@ class ANM(BaseCausalDiscovery):
         Returns
         -------
         score : float
-            The CI-test effect size between ``cause`` and the residuals. A smaller absolute value indicates more
-            independent residuals, i.e. a better-fitting direction.
+            The ``score`` evaluated on ``cause`` and the residuals. A smaller value indicates more independent
+            residuals, i.e. a better-fitting direction.
         """
         if self.regressor is None:
             from sklearn.gaussian_process import GaussianProcessRegressor
@@ -163,9 +181,5 @@ class ANM(BaseCausalDiscovery):
         regressor.fit(cause, effect)
         residual = effect - regressor.predict(cause)
 
-        cause_name = cause.columns[0]
-        resid_data = cause.assign(_residual=residual)
-        ci_test = get_ci_test(test=self.ci_test, data=resid_data)
-        ci_test.run_test(cause_name, "_residual", Z=[])
-
-        return ci_test.effect_size_
+        score_fn = get_anm_score(self.score)
+        return score_fn(np.asarray(cause).ravel(), np.asarray(residual))

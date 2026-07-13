@@ -16,7 +16,7 @@ def nonlinear_data(n=1000):
 
 def test_init():
     est = ANM()
-    assert est.get_params() == {"regressor": None, "ci_test": None}
+    assert est.get_params() == {"regressor": None, "score": "independence"}
 
 
 def test_fit_recovers_direction(nonlinear_data):
@@ -36,6 +36,44 @@ def test_reproducible(nonlinear_data):
     est2 = ANM().fit(nonlinear_data)
     assert est1.forward_score_ == est2.forward_score_
     assert est1.backward_score_ == est2.backward_score_
+
+
+@pytest.mark.parametrize("score", ["independence", "entropy", "gauss"])
+def test_builtin_scores_recover_direction(nonlinear_data, score):
+    est = ANM(score=score).fit(nonlinear_data)
+    assert list(est.causal_graph_.edges()) == [("X", "Y")]
+    assert est.forward_score_ < est.backward_score_
+
+
+def test_score_instance_is_used(nonlinear_data):
+    from pgmpy.causal_discovery import EntropyScore, IndependenceScore
+
+    for score in (
+        EntropyScore(method="vasicek"),
+        IndependenceScore(ci_test="pearsonr"),
+        IndependenceScore(criterion="p_value"),
+    ):
+        est = ANM(score=score).fit(nonlinear_data)
+        assert list(est.causal_graph_.edges()) == [("X", "Y")]
+
+
+def test_score_hyperparameters_surface_errors(nonlinear_data):
+    from pgmpy.causal_discovery import EntropyScore, IndependenceScore
+
+    with pytest.raises(ValueError):  # scipy rejects an unknown differential_entropy method
+        ANM(score=EntropyScore(method="not_a_method")).fit(nonlinear_data)
+    with pytest.raises(ValueError):  # get_ci_test rejects an unknown test name
+        ANM(score=IndependenceScore(ci_test="not_a_test")).fit(nonlinear_data)
+
+
+def test_clone_preserves_score_instance():
+    from sklearn.base import clone
+
+    from pgmpy.causal_discovery import EntropyScore
+
+    cloned = clone(ANM(score=EntropyScore(method="vasicek")))
+    assert isinstance(cloned.score, EntropyScore)
+    assert cloned.score.method == "vasicek"
 
 
 @pytest.mark.parametrize(
