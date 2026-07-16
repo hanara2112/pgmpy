@@ -3,6 +3,11 @@ import pandas as pd
 import pytest
 
 from pgmpy.causal_discovery import IGCI
+from pgmpy.causal_discovery.igci_scores import (
+    entropy_score,
+    get_igci_score,
+    slope_score,
+)
 
 
 def _near_deterministic_data(n=500, seed=0):
@@ -26,6 +31,20 @@ def test_init():
         "ref_measure": "uniform",
         "entropy_method": "auto",
     }
+
+
+def test_score_functions():
+    cause = np.linspace(0.1, 1, 100)
+    effect = cause**3
+
+    assert np.isfinite(slope_score(cause, effect))
+    assert np.isfinite(entropy_score(cause, effect))
+    assert get_igci_score("slope") is slope_score
+
+
+def test_custom_score():
+    score = lambda cause, effect: np.mean(effect) - np.mean(cause)
+    assert get_igci_score(score) is score
 
 
 def test_fit_slope():
@@ -67,11 +86,27 @@ def test_tied_cause_values():
     [
         (IGCI(scoring="bogus"), _near_deterministic_data(n=50), "scoring"),
         (IGCI(ref_measure="bogus"), _near_deterministic_data(n=50), "ref_measure"),
-        (IGCI(scoring="entropy", entropy_method="bogus"), _near_deterministic_data(n=50), "entropy_method"),
-        (IGCI(), pd.DataFrame({"X": [1.0, 1.0, 1.0], "Y": [1.0, 2.0, 3.0]}), "constant"),
-        (IGCI(), pd.DataFrame({"X": [0.0, 1.0, 2.0], "Y": [1.0, 2.0, 3.0], "Z": [2.0, 1.0, 0.0]}), "exactly two"),
+        (
+            IGCI(scoring="entropy", entropy_method="bogus"),
+            _near_deterministic_data(n=50),
+            "entropy_method",
+        ),
+        (
+            IGCI(),
+            pd.DataFrame({"X": [1.0, 1.0, 1.0], "Y": [1.0, 2.0, 3.0]}),
+            "constant",
+        ),
+        (
+            IGCI(),
+            pd.DataFrame({"X": [0.0, 1.0, 2.0], "Y": [1.0, 2.0, 3.0], "Z": [2.0, 1.0, 0.0]}),
+            "exactly two",
+        ),
         (IGCI(), pd.DataFrame({"X": [0.0, 1.0, np.nan], "Y": [1.0, 2.0, 3.0]}), None),
-        (IGCI(), pd.DataFrame({"X": list("aabbab"), "Y": list("xyxyxy")}), "continuous"),
+        (
+            IGCI(),
+            pd.DataFrame({"X": list("aabbab"), "Y": list("xyxyxy")}),
+            "continuous",
+        ),
     ],
 )
 def test_invalid_input_raises(estimator, data, match):

@@ -1,14 +1,10 @@
 import networkx as nx
-import numpy as np
 import pandas as pd
-from scipy.special import psi
-from scipy.stats import differential_entropy
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
+from pgmpy.causal_discovery.igci_scores import get_igci_score
 from pgmpy.utils import get_dataset_type
-
-_ENTROPY_METHODS = ("spacing", "vasicek", "ebrahimi", "van es", "correa", "auto")
 
 
 class IGCI(BaseCausalDiscovery):
@@ -28,11 +24,12 @@ class IGCI(BaseCausalDiscovery):
 
     Parameters
     ----------
-    scoring : str, default="slope"
+    scoring : str or callable, default="slope"
         Direction score to use. One of:
 
         - ``"slope"``: weighted mean of log-slopes along cause-ordered points.
         - ``"entropy"``: estimated marginal entropy of the effect minus that of the cause.
+        - A callable of the form ``score(cause, effect) -> float``.
 
     ref_measure : str, default="uniform"
         Affine preprocessing for each variable before scoring. One of:
@@ -100,84 +97,6 @@ class IGCI(BaseCausalDiscovery):
         tags.input_tags.categorical = False
         return tags
 
-    def _marginal_entropy(self, x: np.ndarray) -> float:
-        """
-        Estimate differential entropy of one normalized variable.
-
-        Parameters
-        ----------
-        x : np.ndarray
-            One-dimensional normalized sample.
-
-        Returns
-        -------
-        float
-            Estimated differential entropy.
-        """
-        xs = np.sort(x)
-        if xs.size < 2:
-            raise ValueError("IGCI entropy estimation requires at least two observations.")
-        deltas = np.diff(xs)
-        spacing_sum = np.sum(np.log(deltas[deltas > 0]))
-        return psi(xs.size) - psi(1.0) + spacing_sum / (xs.size - 1)
-
-    def _slope_score(self, cause: np.ndarray, effect: np.ndarray) -> float:
-        """
-        Score the ``cause -> effect`` direction via log-slopes.
-
-        Parameters
-        ----------
-        cause : np.ndarray
-            Normalized candidate cause sample.
-        effect : np.ndarray
-            Normalized candidate effect sample, aligned with ``cause``.
-
-        Returns
-        -------
-        float
-            Direction score; compared against the reverse direction in ``fit``.
-        """
-        order = np.argsort(cause, kind="stable")
-        cause = cause[order]
-        effect = effect[order]
-
-        run_start = np.concatenate(([0], np.flatnonzero(cause[1:] != cause[:-1]) + 1))
-        multiplicities = np.diff(np.concatenate((run_start, [cause.size])))
-        unique_cause = cause[run_start]
-        unique_effect = effect[run_start]
-
-        if unique_cause.size < 2:
-            raise ValueError(
-                "IGCI requires sufficiently distinct cause values after removing repetitions; no valid pairs remained."
-            )
-
-        dc = np.diff(unique_cause)
-        de = np.diff(unique_effect)
-        weights = multiplicities[:-1]
-        valid = (dc != 0) & (de != 0)
-        if not valid.any():
-            raise ValueError(
-                "IGCI requires sufficiently distinct continuous observations; no valid slope pairs remained."
-            )
-
-        weights = weights[valid]
-        return np.sum(weights * np.log(np.abs(de[valid] / dc[valid]))) / weights.sum()
-
-    def _direction_score(self, cause: np.ndarray, effect: np.ndarray) -> float:
-        """Return the IGCI score for the ``cause -> effect`` ordering."""
-        if self.scoring == "slope":
-            return self._slope_score(cause, effect)
-
-        if self.entropy_method in ("spacing", "auto"):
-            h_effect = self._marginal_entropy(effect)
-            h_cause = self._marginal_entropy(cause)
-        else:
-            h_effect = differential_entropy(effect, method=self.entropy_method)
-            h_cause = differential_entropy(cause, method=self.entropy_method)
-        if not np.isfinite(h_effect) or not np.isfinite(h_cause):
-            raise ValueError(f"Entropy estimation with method {self.entropy_method!r} failed for the given sample.")
-        return h_effect - h_cause
-
     def _fit(self, X: pd.DataFrame):
         """
         Orient the edge between the two variables in ``X`` using IGCI.
@@ -193,13 +112,10 @@ class IGCI(BaseCausalDiscovery):
         self : IGCI
             Returns the instance with the fitted attributes set.
         """
-        # Step 1: Validate hyperparameters.
-        if self.scoring not in ("slope", "entropy"):
-            raise ValueError(f"scoring must be one of ('slope', 'entropy'). Got: {self.scoring!r}")
+        # Step 1: Validate hyperparameters and resolve the score function.
         if self.ref_measure not in ("uniform", "gaussian"):
             raise ValueError(f"ref_measure must be one of ('uniform', 'gaussian'). Got: {self.ref_measure!r}")
-        if self.scoring == "entropy" and self.entropy_method not in _ENTROPY_METHODS:
-            raise ValueError(f"entropy_method must be one of {_ENTROPY_METHODS}. Got: {self.entropy_method!r}")
+        score = get_igci_score(self.scoring, self.entropy_method)
 
         # Step 2: Validate the input data.
         if X.shape[1] != 2:
@@ -223,8 +139,8 @@ class IGCI(BaseCausalDiscovery):
             y_norm = (y_vals - y_vals.mean()) / y_vals.std()
 
         # Step 4: Score both directions.
-        self.forward_score_ = self._direction_score(cause=x_norm, effect=y_norm)
-        self.backward_score_ = self._direction_score(cause=y_norm, effect=x_norm)
+        self.forward_score_ = score(x_norm, y_norm)
+        self.backward_score_ = score(y_norm, x_norm)
 
         # Step 5: Orient the edge and store the fitted attributes.
         edge = (x, y) if self.forward_score_ <= self.backward_score_ else (y, x)
