@@ -103,7 +103,12 @@ class EntropyScore(BaseANMScore):
         super().__init__()
 
     def __call__(self, cause, residual) -> float:
-        kwargs = {"method": self.method, "window_length": self.window_length, "base": self.base}
+        kwargs = {"method": self.method, "base": self.base}
+
+        # This is required due to API changes in scipy 1.16.
+        if self.window_length is not None:
+            kwargs["window_length"] = self.window_length
+
         return float(
             differential_entropy(np.asarray(cause), **kwargs) + differential_entropy(np.asarray(residual), **kwargs)
         )
