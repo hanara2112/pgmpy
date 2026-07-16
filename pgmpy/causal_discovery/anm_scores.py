@@ -11,27 +11,27 @@ class BaseANMScore(BaseObject):
     """
     Base class for ANM direction scores.
 
-    Subclasses implement :meth:`__call__` with signature ``(cause, residual) -> float`` where a
-    smaller value indicates residuals that are more independent of the cause (a better-fitting
-    causal direction). Hyperparameters are configured through the subclass ``__init__``, and the
-    ``name`` tag is the string key used to select the score via :func:`get_anm_score`.
+    Subclasses implement :meth:`__call__` with signature ``(x, y) -> float`` where a smaller value
+    indicates that ``x`` and ``y`` are more independent. Hyperparameters are configured through the
+    subclass ``__init__``, and the ``name`` tag is the string key used to select the score via
+    :func:`get_anm_score`.
     """
 
     _tags = {
         "name": None,
     }
 
-    def __call__(self, cause, residual) -> float:
+    def __call__(self, x, y) -> float:
         raise NotImplementedError
 
 
 class IndependenceScore(BaseANMScore):
     """
-    Residual-dependence score from a conditional-independence test.
+    Dependence score from a conditional-independence test.
 
-    Runs a CI test between ``cause`` and ``residual`` (unconditionally) and returns one of its
-    outputs as the direction score. The score is always oriented so that **a smaller value means the
-    residuals are more independent of the cause**.
+    Runs an unconditional CI test between ``x`` and ``y`` and returns one of its outputs as the
+    score. The score is always oriented so that **a smaller value means the variables are more
+    independent**.
 
     Parameters
     ----------
@@ -57,10 +57,10 @@ class IndependenceScore(BaseANMScore):
         self.criterion = criterion
         super().__init__()
 
-    def __call__(self, cause, residual) -> float:
-        data = pd.DataFrame({"_cause": np.asarray(cause), "_residual": np.asarray(residual)})
+    def __call__(self, x, y) -> float:
+        data = pd.DataFrame({"_x": np.asarray(x), "_y": np.asarray(y)})
         test = get_ci_test(test=self.ci_test, data=data)
-        test.run_test("_cause", "_residual", Z=[])
+        test.run_test("_x", "_y", Z=[])
 
         if self.criterion == "effect_size":
             return test.effect_size_
@@ -75,7 +75,7 @@ class IndependenceScore(BaseANMScore):
 
 class EntropyScore(BaseANMScore):
     """
-    Differential-entropy score, ``H(cause) + H(residual)`` :cite:p:`mooij_2016`.
+    Differential-entropy score, ``H(x) + H(y)`` :cite:p:`mooij_2016`.
 
     A smaller value means a better-fitting direction. The parameters are forwarded to
     :func:`scipy.stats.differential_entropy`.
@@ -102,21 +102,19 @@ class EntropyScore(BaseANMScore):
         self.base = base
         super().__init__()
 
-    def __call__(self, cause, residual) -> float:
+    def __call__(self, x, y) -> float:
         kwargs = {"method": self.method, "base": self.base}
 
         # This is required due to API changes in scipy 1.16.
         if self.window_length is not None:
             kwargs["window_length"] = self.window_length
 
-        return float(
-            differential_entropy(np.asarray(cause), **kwargs) + differential_entropy(np.asarray(residual), **kwargs)
-        )
+        return float(differential_entropy(np.asarray(x), **kwargs) + differential_entropy(np.asarray(y), **kwargs))
 
 
 class GaussScore(BaseANMScore):
     """
-    Gaussian (log-variance) score, ``log Var(cause) + log Var(residual)`` :cite:p:`mooij_2016`.
+    Gaussian (log-variance) score, ``log Var(x) + log Var(y)`` :cite:p:`mooij_2016`.
 
     The Gaussian special case of :class:`EntropyScore` (the differential entropy of a variable is
     upper-bounded by ``0.5 * log(2 * pi * e * Var)``, with equality for a Gaussian). A smaller value
@@ -131,8 +129,8 @@ class GaussScore(BaseANMScore):
         "name": "gauss",
     }
 
-    def __call__(self, cause, residual) -> float:
-        return float(np.log(np.var(np.asarray(cause))) + np.log(np.var(np.asarray(residual))))
+    def __call__(self, x, y) -> float:
+        return float(np.log(np.var(np.asarray(x))) + np.log(np.var(np.asarray(y))))
 
 
 def get_anm_score(score):
@@ -145,12 +143,12 @@ def get_anm_score(score):
         - a registered score name (the ``name`` tag of a :class:`BaseANMScore`, e.g.
           ``"independence"``, ``"entropy"``, ``"gauss"``), resolved to a default-configured instance;
         - a :class:`BaseANMScore` instance, returned as-is;
-        - any callable ``fn(cause, residual) -> float``, returned as-is.
+        - any callable ``fn(x, y) -> float``, returned as-is.
 
     Returns
     -------
     callable
-        An object callable as ``score(cause, residual) -> float``.
+        An object callable as ``score(x, y) -> float``.
 
     Raises
     ------
@@ -172,7 +170,7 @@ def get_anm_score(score):
             return scores[0]()
         raise ValueError(
             f"Unknown score: {score!r}. Must be a registered score name, a BaseANMScore "
-            "instance, or a callable of the form fn(cause, residual) -> float."
+            "instance, or a callable of the form fn(x, y) -> float."
         )
 
     if callable(score) and not isinstance(score, type):
@@ -180,5 +178,5 @@ def get_anm_score(score):
 
     raise ValueError(
         f"Invalid score: {score!r}. Must be a registered score name, a BaseANMScore "
-        "instance, or a callable of the form fn(cause, residual) -> float."
+        "instance, or a callable of the form fn(x, y) -> float."
     )
