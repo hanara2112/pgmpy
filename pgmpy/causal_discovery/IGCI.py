@@ -3,7 +3,7 @@ import pandas as pd
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
-from pgmpy.causal_discovery.bivariate_scores import get_igci_score
+from pgmpy.causal_discovery.bivariate_scores import get_bivariate_score
 from pgmpy.utils import get_dataset_type
 
 
@@ -111,7 +111,7 @@ class IGCI(BaseCausalDiscovery):
         # Step 1: Validate hyperparameters and resolve the score function.
         if self.ref_measure not in ("uniform", "gaussian"):
             raise ValueError(f"ref_measure must be one of ('uniform', 'gaussian'). Got: {self.ref_measure!r}")
-        score = get_igci_score(self.score)
+        score = get_bivariate_score(self.score, algorithm="igci")
 
         # Step 2: Validate the input data.
         if X.shape[1] != 2:

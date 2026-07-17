@@ -5,7 +5,7 @@ from sklearn.base import clone
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
-from pgmpy.causal_discovery.bivariate_scores import get_anm_score
+from pgmpy.causal_discovery.bivariate_scores import get_bivariate_score
 from pgmpy.utils import get_dataset_type
 
 
@@ -30,14 +30,16 @@ class ANM(BaseCausalDiscovery):
         with an RBF plus white-noise kernel is used, with the input and target standardized so that the unit-scale
         kernel initialization is appropriate regardless of the scale of the data.
 
-    score : str, BaseANMScore instance, or callable, default="independence"
+    score : str, BaseBivariateScore instance, or callable, default="independence"
         How a candidate direction is scored from the cause and the regression residuals. A smaller score means the
         residuals are more independent of the cause, i.e. a better-fitting direction. One of:
 
         - a built-in name -- ``"independence"`` (a CI-test effect size, the default;
-          :class:`~pgmpy.causal_discovery.IndependenceScore` with ``"pearsonr"``), ``"entropy"``
-          (:class:`~pgmpy.causal_discovery.EntropyScore`), or ``"gauss"`` (:class:`~pgmpy.causal_discovery.GaussScore`);
-        - a configured :class:`~pgmpy.causal_discovery.BaseANMScore` instance, e.g. ``EntropyScore(method="vasicek")``;
+          :class:`~pgmpy.causal_discovery.bivariate_scores.IndependenceScore` with ``"pearsonr"``), ``"entropy"``
+          (:class:`~pgmpy.causal_discovery.bivariate_scores.EntropyScore`), or ``"gauss"``
+          (:class:`~pgmpy.causal_discovery.bivariate_scores.GaussScore`);
+        - a configured :class:`~pgmpy.causal_discovery.bivariate_scores.BaseBivariateScore` instance, e.g.
+          ``EntropyScore(method="vasicek")``;
         - any callable of the form ``fn(cause, residual) -> float``.
 
     Attributes
@@ -132,7 +134,7 @@ class ANM(BaseCausalDiscovery):
                 raise ValueError(f"Variable '{col}' is constant; ANM requires non-constant variables.")
 
         # Step 1: Fit models in both directions and compute the residual-dependence scores.
-        score_fn = get_anm_score(self.score)
+        score_fn = get_bivariate_score(self.score, algorithm="anm")
         self.forward_score_ = self._direction_score(cause=X[[x]], effect=X[y], score_fn=score_fn)
         self.backward_score_ = self._direction_score(cause=X[[y]], effect=X[x], score_fn=score_fn)
 

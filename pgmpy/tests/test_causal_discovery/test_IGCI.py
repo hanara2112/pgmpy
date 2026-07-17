@@ -23,9 +23,9 @@ def test_init():
 
 
 def test_slope_score(nonlinear_data):
-    from pgmpy.causal_discovery.bivariate_scores import SlopeScore, get_igci_score
+    from pgmpy.causal_discovery.bivariate_scores import SlopeScore, get_bivariate_score
 
-    score = get_igci_score("slope")
+    score = get_bivariate_score("slope", algorithm="igci")
     assert isinstance(score, SlopeScore)
     assert score.get_tag("name") == "slope"
     assert score.get_tag("supported_algorithms") == ["igci"]
@@ -41,9 +41,9 @@ def test_slope_score(nonlinear_data):
 
 
 def test_weighted_slope_score():
-    from pgmpy.causal_discovery.bivariate_scores import WeightedSlopeScore, get_igci_score
+    from pgmpy.causal_discovery.bivariate_scores import WeightedSlopeScore, get_bivariate_score
 
-    score = get_igci_score("slope_weighted")
+    score = get_bivariate_score("slope_weighted", algorithm="igci")
     assert isinstance(score, WeightedSlopeScore)
     assert score.get_tag("name") == "slope_weighted"
     assert score.get_tag("supported_algorithms") == ["igci"]
@@ -56,9 +56,9 @@ def test_weighted_slope_score():
 
 
 def test_entropy_score(nonlinear_data):
-    from pgmpy.causal_discovery.bivariate_scores import EntropyDifferenceScore, get_igci_score
+    from pgmpy.causal_discovery.bivariate_scores import EntropyDifferenceScore, get_bivariate_score
 
-    score = get_igci_score("entropy")
+    score = get_bivariate_score("entropy", algorithm="igci")
     assert isinstance(score, EntropyDifferenceScore)
     assert score.method == "spacing"
     assert score.get_tag("name") == "entropy"
@@ -72,16 +72,17 @@ def test_entropy_score(nonlinear_data):
     natural_score = score(cause, effect)
     base_two_score = EntropyDifferenceScore(base=2)(cause, effect)
     assert base_two_score == pytest.approx(natural_score / np.log(2))
+    assert np.isfinite(EntropyDifferenceScore(method="vasicek", window_length=5)(cause, effect))
 
     with pytest.raises(ValueError):
         IGCI(score=EntropyDifferenceScore(method="bogus")).fit(nonlinear_data)
 
 
 def test_custom_score():
-    from pgmpy.causal_discovery.bivariate_scores import get_igci_score
+    from pgmpy.causal_discovery.bivariate_scores import get_bivariate_score
 
     score = lambda cause, effect: np.mean(effect) - np.mean(cause)
-    assert get_igci_score(score) is score
+    assert get_bivariate_score(score, algorithm="igci") is score
 
 
 @pytest.mark.parametrize("ref_measure", ["uniform", "gaussian"])

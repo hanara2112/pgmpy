@@ -31,31 +31,31 @@ def _estimate_entropy(values, method="auto", window_length=None, base=None) -> f
     if base is not None and (base <= 0 or base == 1):
         raise ValueError("base must be positive and not equal to 1.")
 
-    if method == "spacing":
-        if window_length is not None:
-            raise ValueError("window_length is not supported by the spacing estimator.")
-
-        values = np.sort(values)
-        if values.size < 2:
-            raise ValueError("Entropy estimation requires at least two observations.")
-
-        deltas = np.diff(values)
-        deltas = deltas[deltas > 0]
-        if deltas.size == 0:
-            raise ValueError("Spacing entropy requires distinct observations.")
-
-        entropy = psi(values.size) - psi(1) + np.log(deltas).sum() / (values.size - 1)
-        if base is not None:
-            entropy /= np.log(base)
+    if method != "spacing":
+        entropy = differential_entropy(
+            values,
+            method=method,
+            window_length=window_length,
+            base=base,
+        )
         return _ensure_finite(entropy, name="Entropy estimate")
 
-    kwargs = {"method": method, "base": base}
-
-    # This is required due to API changes in scipy 1.16.
     if window_length is not None:
-        kwargs["window_length"] = window_length
+        raise ValueError("window_length is not supported by the spacing estimator.")
 
-    return _ensure_finite(differential_entropy(values, **kwargs), name="Entropy estimate")
+    values = np.sort(values)
+    if values.size < 2:
+        raise ValueError("Entropy estimation requires at least two observations.")
+
+    deltas = np.diff(values)
+    deltas = deltas[deltas > 0]
+    if deltas.size == 0:
+        raise ValueError("Spacing entropy requires distinct observations.")
+
+    entropy = psi(values.size) - psi(1) + np.log(deltas).sum() / (values.size - 1)
+    if base is not None:
+        entropy /= np.log(base)
+    return _ensure_finite(entropy, name="Entropy estimate")
 
 
 def _estimate_pair_entropies(x, y, method="auto", window_length=None, base=None):
@@ -90,11 +90,7 @@ class BaseBivariateScore(BaseObject):
         raise NotImplementedError
 
 
-# Backward-compatible name retained for the public ANM score API.
-BaseANMScore = BaseBivariateScore
-
-
-class IndependenceScore(BaseANMScore):
+class IndependenceScore(BaseBivariateScore):
     """
     Dependence score from a conditional-independence test.
 
@@ -139,7 +135,7 @@ class IndependenceScore(BaseANMScore):
         return _ensure_finite(score)
 
 
-class EntropyScore(BaseANMScore):
+class EntropyScore(BaseBivariateScore):
     """
     Sum of marginal entropies, ``H(x) + H(y)``.
 
@@ -215,7 +211,7 @@ class EntropyDifferenceScore(BaseBivariateScore):
         return _ensure_finite(y_entropy - x_entropy)
 
 
-class GaussScore(BaseANMScore):
+class GaussScore(BaseBivariateScore):
     """
     Gaussian score, ``log Var(x) + log Var(y)``.
 
@@ -304,15 +300,15 @@ class WeightedSlopeScore(BaseBivariateScore):
         return _ensure_finite(score)
 
 
-def _resolve_score(score: str | Callable, algorithm: str) -> Callable:
-    """Resolve a score for a causal discovery algorithm.
+def get_bivariate_score(score: str | Callable, algorithm: str) -> Callable:
+    """Return a score selected by name or supplied by the user.
 
     Parameters
     ----------
     score : str or callable
-        Built-in score name or a configured callable.
-    algorithm : str
-        Algorithm name used to filter the supported score classes.
+        Built-in score name, configured score object, or custom callable.
+    algorithm : {"anm", "igci"}
+        Causal discovery algorithm that will use the score.
 
     Returns
     -------
@@ -344,47 +340,3 @@ def _resolve_score(score: str | Callable, algorithm: str) -> Callable:
         return score
 
     raise ValueError(f"Invalid {algorithm.upper()} score: {score!r}. Pass a built-in name or callable.")
-
-
-def get_anm_score(score: str | Callable) -> Callable:
-    """Return the ANM score selected by name or supplied by the user.
-
-    Parameters
-    ----------
-    score : str or callable
-        Built-in name ``"independence"``, ``"entropy"``, or ``"gauss"``. Score objects and
-        other callables with signature ``score(cause, residual) -> float`` are returned unchanged.
-
-    Returns
-    -------
-    callable
-        Resolved score callable.
-
-    Raises
-    ------
-    ValueError
-        If ``score`` is an unknown name or is not callable.
-    """
-    return _resolve_score(score, "anm")
-
-
-def get_igci_score(score: str | Callable) -> Callable:
-    """Return the IGCI score selected by name or supplied by the user.
-
-    Parameters
-    ----------
-    score : str or callable
-        Built-in name ``"slope"``, ``"slope_weighted"``, or ``"entropy"``. Score objects and
-        other callables with signature ``score(cause, effect) -> float`` are returned unchanged.
-
-    Returns
-    -------
-    callable
-        Resolved score callable.
-
-    Raises
-    ------
-    ValueError
-        If ``score`` is an unknown name or is not callable.
-    """
-    return _resolve_score(score, "igci")
