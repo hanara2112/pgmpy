@@ -19,6 +19,19 @@ def test_init():
     assert est.get_params() == {"regressor": None, "score": "independence"}
 
 
+def test_score_algorithm_tags():
+    from pgmpy.causal_discovery.bivariate_scores import EntropyScore, GaussScore, IndependenceScore
+
+    scores = {
+        "independence": IndependenceScore(),
+        "entropy": EntropyScore(),
+        "gauss": GaussScore(),
+    }
+    for name, score in scores.items():
+        assert score.get_tag("name") == name
+        assert score.get_tag("supported_algorithms") == ["anm"]
+
+
 def test_fit_recovers_direction(nonlinear_data):
     data = nonlinear_data
     est = ANM().fit(data)
@@ -46,7 +59,7 @@ def test_builtin_scores_recover_direction(nonlinear_data, score):
 
 
 def test_score_instance_is_used(nonlinear_data):
-    from pgmpy.causal_discovery.anm_scores import EntropyScore, IndependenceScore
+    from pgmpy.causal_discovery.bivariate_scores import EntropyScore, IndependenceScore
 
     for score in (
         EntropyScore(method="vasicek"),
@@ -58,7 +71,7 @@ def test_score_instance_is_used(nonlinear_data):
 
 
 def test_score_hyperparameters_surface_errors(nonlinear_data):
-    from pgmpy.causal_discovery.anm_scores import EntropyScore, IndependenceScore
+    from pgmpy.causal_discovery.bivariate_scores import EntropyScore, IndependenceScore
 
     with pytest.raises(ValueError):  # scipy rejects an unknown differential_entropy method
         ANM(score=EntropyScore(method="not_a_method")).fit(nonlinear_data)
@@ -69,7 +82,7 @@ def test_score_hyperparameters_surface_errors(nonlinear_data):
 def test_clone_preserves_score_instance():
     from sklearn.base import clone
 
-    from pgmpy.causal_discovery.anm_scores import EntropyScore
+    from pgmpy.causal_discovery.bivariate_scores import EntropyScore
 
     cloned = clone(ANM(score=EntropyScore(method="vasicek")))
     assert isinstance(cloned.score, EntropyScore)

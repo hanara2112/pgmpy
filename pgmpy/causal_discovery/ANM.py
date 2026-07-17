@@ -5,7 +5,7 @@ from sklearn.base import clone
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
-from pgmpy.causal_discovery.anm_scores import get_anm_score
+from pgmpy.causal_discovery.bivariate_scores import get_anm_score
 from pgmpy.utils import get_dataset_type
 
 
@@ -67,7 +67,7 @@ class ANM(BaseCausalDiscovery):
     >>> import numpy as np
     >>> import pandas as pd
     >>> from pgmpy.causal_discovery import ANM
-    >>> from pgmpy.causal_discovery.anm_scores import EntropyScore
+    >>> from pgmpy.causal_discovery.bivariate_scores import EntropyScore
     >>> rng = np.random.default_rng(42)
     >>> x = rng.uniform(-2, 2, 500)
     >>> df = pd.DataFrame({"X": x, "Y": x**3 + rng.laplace(size=500)})
@@ -132,8 +132,9 @@ class ANM(BaseCausalDiscovery):
                 raise ValueError(f"Variable '{col}' is constant; ANM requires non-constant variables.")
 
         # Step 1: Fit models in both directions and compute the residual-dependence scores.
-        self.forward_score_ = self._direction_score(cause=X[[x]], effect=X[y])
-        self.backward_score_ = self._direction_score(cause=X[[y]], effect=X[x])
+        score_fn = get_anm_score(self.score)
+        self.forward_score_ = self._direction_score(cause=X[[x]], effect=X[y], score_fn=score_fn)
+        self.backward_score_ = self._direction_score(cause=X[[y]], effect=X[x], score_fn=score_fn)
 
         # Step 2: Orient the edge toward the direction with the smaller score.
         edge = (x, y) if self.forward_score_ <= self.backward_score_ else (y, x)
@@ -142,7 +143,7 @@ class ANM(BaseCausalDiscovery):
 
         return self
 
-    def _direction_score(self, cause: pd.DataFrame, effect: pd.Series) -> float:
+    def _direction_score(self, cause: pd.DataFrame, effect: pd.Series, score_fn) -> float:
         """
         Score the residual dependence for the ``cause -> effect`` direction.
 
@@ -156,6 +157,9 @@ class ANM(BaseCausalDiscovery):
 
         effect : pd.Series
             The candidate effect variable, regressed on ``cause``.
+
+        score_fn : callable
+            Resolved score callable with signature ``score_fn(cause, residual) -> float``.
 
         Returns
         -------
@@ -182,5 +186,4 @@ class ANM(BaseCausalDiscovery):
         regressor.fit(cause, effect)
         residual = effect - regressor.predict(cause)
 
-        score_fn = get_anm_score(self.score)
         return score_fn(np.asarray(cause).ravel(), np.asarray(residual))

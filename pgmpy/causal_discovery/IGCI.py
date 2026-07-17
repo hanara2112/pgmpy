@@ -3,7 +3,7 @@ import pandas as pd
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
-from pgmpy.causal_discovery.igci_scores import get_igci_score
+from pgmpy.causal_discovery.bivariate_scores import get_igci_score
 from pgmpy.utils import get_dataset_type
 
 
@@ -24,11 +24,13 @@ class IGCI(BaseCausalDiscovery):
 
     Parameters
     ----------
-    scoring : str or callable, default="slope"
+    score : str, BaseBivariateScore instance, or callable, default="slope_weighted"
         Direction score to use. One of:
 
-        - ``"slope"``: weighted mean of log-slopes along cause-ordered points.
+        - ``"slope"``: mean log-slope estimator from Equation 19 in :cite:t:`mooij_2016`.
+        - ``"slope_weighted"``: repetition-aware weighted estimator from Equation 21.
         - ``"entropy"``: estimated marginal entropy of the effect minus that of the cause.
+        - A configured :class:`~pgmpy.causal_discovery.bivariate_scores.BaseBivariateScore` instance.
         - A callable of the form ``score(cause, effect) -> float``.
 
     ref_measure : str, default="uniform"
@@ -36,11 +38,6 @@ class IGCI(BaseCausalDiscovery):
 
         - ``"uniform"``: min-max scaling to ``[0, 1]``.
         - ``"gaussian"``: zero mean and unit variance.
-
-    entropy_method : str, default="auto"
-        Entropy estimator when ``scoring="entropy"``. ``"auto"`` and ``"spacing"`` use
-        the IGCI sorted-spacing estimator. Other values are passed to
-        ``scipy.stats.differential_entropy``.
 
     Attributes
     ----------
@@ -77,7 +74,7 @@ class IGCI(BaseCausalDiscovery):
     np.float64(0.22245)
     >>> igci.backward_score_.round(5)
     np.float64(1.66886)
-    >>> IGCI(scoring="entropy").fit(df).forward_score_.round(5)
+    >>> IGCI(score="entropy").fit(df).forward_score_.round(5)
     np.float64(-0.70337)
 
     References
@@ -87,10 +84,9 @@ class IGCI(BaseCausalDiscovery):
 
     """
 
-    def __init__(self, scoring="slope", ref_measure="uniform", entropy_method="auto"):
-        self.scoring = scoring
+    def __init__(self, score="slope_weighted", ref_measure="uniform"):
+        self.score = score
         self.ref_measure = ref_measure
-        self.entropy_method = entropy_method
 
     def __sklearn_tags__(self):
         tags = super().__sklearn_tags__()
@@ -115,7 +111,7 @@ class IGCI(BaseCausalDiscovery):
         # Step 1: Validate hyperparameters and resolve the score function.
         if self.ref_measure not in ("uniform", "gaussian"):
             raise ValueError(f"ref_measure must be one of ('uniform', 'gaussian'). Got: {self.ref_measure!r}")
-        score = get_igci_score(self.scoring, self.entropy_method)
+        score = get_igci_score(self.score)
 
         # Step 2: Validate the input data.
         if X.shape[1] != 2:
