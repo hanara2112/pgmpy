@@ -24,20 +24,13 @@ class IGCI(BaseCausalDiscovery):
 
     Parameters
     ----------
-    score : str, BaseBivariateScore instance, or callable, default="slope_weighted"
-        Direction score to use. One of:
+    score : str, BaseBivariateScore instance, or callable, default="slope"
+        Score used to compare the two directions. Use ``"slope"``, ``"entropy"``, a configured
+        score object, or a callable of the form ``score(x, y) -> float``.
 
-        - ``"slope"``: mean log-slope estimator from Equation 19 in :cite:t:`mooij_2016`.
-        - ``"slope_weighted"``: repetition-aware weighted estimator from Equation 21.
-        - ``"entropy"``: estimated marginal entropy of the effect minus that of the cause.
-        - A configured :class:`~pgmpy.causal_discovery.bivariate_scores.BaseBivariateScore` instance.
-        - A callable of the form ``score(cause, effect) -> float``.
-
-    ref_measure : str, default="uniform"
-        Affine preprocessing for each variable before scoring. One of:
-
-        - ``"uniform"``: min-max scaling to ``[0, 1]``.
-        - ``"gaussian"``: zero mean and unit variance.
+    ref_measure : {"uniform", "gaussian"}, default="uniform"
+        Method used to normalize both variables before scoring. ``"uniform"`` uses min-max
+        scaling and ``"gaussian"`` uses standardization.
 
     Attributes
     ----------
@@ -70,12 +63,12 @@ class IGCI(BaseCausalDiscovery):
     >>> igci = IGCI().fit(df)
     >>> list(igci.causal_graph_.edges())
     [('X', 'Y')]
-    >>> igci.forward_score_.round(5)
-    np.float64(0.22245)
-    >>> igci.backward_score_.round(5)
-    np.float64(1.66886)
-    >>> IGCI(score="entropy").fit(df).forward_score_.round(5)
-    np.float64(-0.70337)
+    >>> round(igci.forward_score_, 5)
+    0.22245
+    >>> round(igci.backward_score_, 5)
+    1.66886
+    >>> round(IGCI(score="entropy").fit(df).forward_score_, 5)
+    -0.70337
 
     References
     ----------
@@ -84,7 +77,7 @@ class IGCI(BaseCausalDiscovery):
 
     """
 
-    def __init__(self, score="slope_weighted", ref_measure="uniform"):
+    def __init__(self, score="slope", ref_measure="uniform"):
         self.score = score
         self.ref_measure = ref_measure
 

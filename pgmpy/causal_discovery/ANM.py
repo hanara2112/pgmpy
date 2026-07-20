@@ -76,10 +76,10 @@ class ANM(BaseCausalDiscovery):
     >>> anm = ANM().fit(df)
     >>> anm.causal_graph_.edges()
     OutEdgeView([('X', 'Y')])
-    >>> anm.forward_score_.round(5)
-    np.float64(0.00104)
-    >>> anm.backward_score_.round(5)
-    np.float64(0.00543)
+    >>> round(anm.forward_score_, 5)
+    0.00104
+    >>> round(anm.backward_score_, 5)
+    0.00543
 
     The scoring method can be selected by name:
 

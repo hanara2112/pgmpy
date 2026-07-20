@@ -70,6 +70,16 @@ def test_score_instance_is_used(nonlinear_data):
         assert list(est.causal_graph_.edges()) == [("X", "Y")]
 
 
+def test_ci_test_instance_uses_score_input():
+    from pgmpy.causal_discovery.bivariate_scores import IndependenceScore
+    from pgmpy.ci_tests import Pearsonr
+
+    original_data = pd.DataFrame({"_x": [0, 1, 2, 3], "_y": [0, 1, 2, 3]})
+    score = IndependenceScore(ci_test=Pearsonr(data=original_data))
+
+    assert score([0, 1, 2, 3], [-1, 1, 1, -1]) == pytest.approx(0)
+
+
 def test_score_hyperparameters_surface_errors(nonlinear_data):
     from pgmpy.causal_discovery.bivariate_scores import EntropyScore, IndependenceScore
 

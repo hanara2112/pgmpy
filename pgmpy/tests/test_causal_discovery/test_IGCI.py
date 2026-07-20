@@ -17,7 +17,7 @@ def nonlinear_data():
 def test_init():
     est = IGCI()
     assert est.get_params() == {
-        "score": "slope_weighted",
+        "score": "slope",
         "ref_measure": "uniform",
     }
 
@@ -36,22 +36,10 @@ def test_slope_score(nonlinear_data):
     assert est.backward_score_ == pytest.approx(1.3206465666212361, rel=1e-4)
     assert est.adjacency_matrix_.loc["X", "Y"] == 1
 
-    with pytest.raises(ValueError, match="slope_weighted"):
-        score([0, 0, 1], [0, 1, 2])
-
-
-def test_weighted_slope_score():
-    from pgmpy.causal_discovery.bivariate_scores import WeightedSlopeScore, get_bivariate_score
-
-    score = get_bivariate_score("slope_weighted", algorithm="igci")
-    assert isinstance(score, WeightedSlopeScore)
-    assert score.get_tag("name") == "slope_weighted"
-    assert score.get_tag("supported_algorithms") == ["igci"]
-
     rng = np.random.default_rng(1)
     x = np.round(rng.uniform(0, 1, 500), 2)
     y = x**3 + rng.normal(0, 1e-3, 500)
-    est = IGCI(score="slope_weighted").fit(pd.DataFrame({"X": x, "Y": y}))
+    est = IGCI(score="slope").fit(pd.DataFrame({"X": x, "Y": y}))
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
 
 
@@ -67,12 +55,15 @@ def test_entropy_score(nonlinear_data):
     est = IGCI(score="entropy").fit(nonlinear_data)
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
 
-    cause = np.linspace(0.1, 1, 100)
-    effect = cause**3
-    natural_score = score(cause, effect)
-    base_two_score = EntropyDifferenceScore(base=2)(cause, effect)
+    x = np.linspace(0.1, 1, 100)
+    y = x**3
+    natural_score = score(x, y)
+    base_two_score = EntropyDifferenceScore(base=2)(x, y)
     assert base_two_score == pytest.approx(natural_score / np.log(2))
-    assert np.isfinite(EntropyDifferenceScore(method="vasicek", window_length=5)(cause, effect))
+    assert np.isfinite(EntropyDifferenceScore(method="vasicek", window_length=5)(x, y))
+
+    with pytest.raises(ValueError, match="distinct observations"):
+        score([0, 0, 1], [0, 1, 2])
 
     with pytest.raises(ValueError):
         IGCI(score=EntropyDifferenceScore(method="bogus")).fit(nonlinear_data)
@@ -81,7 +72,7 @@ def test_entropy_score(nonlinear_data):
 def test_custom_score():
     from pgmpy.causal_discovery.bivariate_scores import get_bivariate_score
 
-    score = lambda cause, effect: np.mean(effect) - np.mean(cause)
+    score = lambda x, y: np.mean(y) - np.mean(x)
     assert get_bivariate_score(score, algorithm="igci") is score
 
 
