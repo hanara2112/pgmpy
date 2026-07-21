@@ -99,6 +99,13 @@ def test_clone_preserves_score_instance():
     assert cloned.score.method == "vasicek"
 
 
+def test_incompatible_score_instance_raises(nonlinear_data):
+    from pgmpy.causal_discovery.bivariate_scores import SlopeScore
+
+    with pytest.raises(ValueError, match="SlopeScore does not support ANM"):
+        ANM(score=SlopeScore()).fit(nonlinear_data)
+
+
 @pytest.mark.parametrize(
     ("data", "match"),
     [

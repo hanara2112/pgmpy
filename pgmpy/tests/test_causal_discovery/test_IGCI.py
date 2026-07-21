@@ -42,6 +42,11 @@ def test_slope_score(nonlinear_data):
     est = IGCI(score="slope").fit(pd.DataFrame({"X": x, "Y": y}))
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
 
+    with pytest.raises(ValueError, match="two distinct x values"):
+        score([1, 1], [1, 2])
+    with pytest.raises(ValueError, match="non-zero x and y spacings"):
+        score([1, 2], [1, 1])
+
 
 def test_entropy_score(nonlinear_data):
     from pgmpy.causal_discovery.bivariate_scores import EntropyDifferenceScore, get_bivariate_score
@@ -90,6 +95,13 @@ def test_clone_preserves_score_instance():
     cloned = clone(IGCI(score=EntropyDifferenceScore(method="vasicek")))
     assert isinstance(cloned.score, EntropyDifferenceScore)
     assert cloned.score.method == "vasicek"
+
+
+def test_incompatible_score_instance_raises(nonlinear_data):
+    from pgmpy.causal_discovery.bivariate_scores import GaussScore
+
+    with pytest.raises(ValueError, match="GaussScore does not support IGCI"):
+        IGCI(score=GaussScore()).fit(nonlinear_data)
 
 
 @pytest.mark.parametrize(

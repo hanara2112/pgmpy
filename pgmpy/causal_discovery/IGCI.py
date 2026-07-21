@@ -63,11 +63,11 @@ class IGCI(BaseCausalDiscovery):
     >>> igci = IGCI().fit(df)
     >>> list(igci.causal_graph_.edges())
     [('X', 'Y')]
-    >>> round(igci.forward_score_, 5)
+    >>> round(float(igci.forward_score_), 5)
     0.22245
-    >>> round(igci.backward_score_, 5)
+    >>> round(float(igci.backward_score_), 5)
     1.66886
-    >>> round(IGCI(score="entropy").fit(df).forward_score_, 5)
+    >>> round(float(IGCI(score="entropy").fit(df).forward_score_), 5)
     -0.70337
 
     References

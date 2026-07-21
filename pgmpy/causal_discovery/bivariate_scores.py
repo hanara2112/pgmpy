@@ -8,25 +8,7 @@ from skbase.lookup import all_objects
 from pgmpy.ci_tests import BaseCITest, get_ci_test
 
 
-def _ensure_finite(value, name="Score") -> float:
-    """Return ``value`` as a float and raise if it is not finite."""
-    value = float(value)
-    if not np.isfinite(value):
-        raise ValueError(f"{name} is not finite for the given sample.")
-    return value
-
-
-def _scipy_entropy(values, method="auto", window_length=None, base=None) -> float:
-    """Estimate differential entropy using SciPy."""
-    entropy_kwargs = {"method": method, "base": base}
-    if window_length is not None:
-        entropy_kwargs["window_length"] = window_length
-
-    entropy = differential_entropy(np.asarray(values), **entropy_kwargs)
-    return _ensure_finite(entropy, name="Entropy estimate")
-
-
-def _spacing_entropy(values, base=None) -> float:
+def _spacing_entropy(values, base=None):
     """Estimate differential entropy using consecutive sorted spacings."""
     if base is not None and (base <= 0 or base == 1):
         raise ValueError("base must be positive and not equal to 1.")
@@ -42,7 +24,7 @@ def _spacing_entropy(values, base=None) -> float:
     entropy = psi(values.size) - psi(1) + np.log(deltas).sum() / (values.size - 1)
     if base is not None:
         entropy /= np.log(base)
-    return _ensure_finite(entropy, name="Entropy estimate")
+    return entropy
 
 
 class BaseBivariateScore(BaseObject):
@@ -55,7 +37,7 @@ class BaseBivariateScore(BaseObject):
 
     _tags = {"name": None, "supported_algorithms": []}
 
-    def __call__(self, x, y) -> float:
+    def __call__(self, x, y):
         raise NotImplementedError
 
 
@@ -87,7 +69,7 @@ class IndependenceScore(BaseBivariateScore):
         self.criterion = criterion
         super().__init__()
 
-    def __call__(self, x, y) -> float:
+    def __call__(self, x, y):
         data = pd.DataFrame({"_x": np.asarray(x), "_y": np.asarray(y)})
         if isinstance(self.ci_test, BaseCITest):
             test = self.ci_test.clone().set_params(data=data)
@@ -105,7 +87,7 @@ class IndependenceScore(BaseBivariateScore):
             raise ValueError(
                 f"Unknown criterion: {self.criterion!r}. Must be one of 'effect_size', 'statistic', 'p_value'."
             )
-        return _ensure_finite(score)
+        return score
 
 
 class EntropyScore(BaseBivariateScore):
@@ -129,29 +111,24 @@ class EntropyScore(BaseBivariateScore):
 
     _tags = {"name": "entropy", "supported_algorithms": ["anm"]}
 
-    def __init__(
-        self,
-        method="auto",
-        window_length=None,
-        base=None,
-    ):
+    def __init__(self, method="auto", window_length=None, base=None):
         self.method = method
         self.window_length = window_length
         self.base = base
         super().__init__()
 
-    def __call__(self, x, y) -> float:
+    def __call__(self, x, y):
         entropy_kwargs = {
             "method": self.method,
             "window_length": self.window_length,
             "base": self.base,
         }
-        return _scipy_entropy(x, **entropy_kwargs) + _scipy_entropy(y, **entropy_kwargs)
+        return differential_entropy(x, **entropy_kwargs) + differential_entropy(y, **entropy_kwargs)
 
 
 class EntropyDifferenceScore(BaseBivariateScore):
     """
-    Difference of marginal entropies, ``H(y) - H(x)``.
+    Difference of marginal entropies, ``H(y) - H(x)`` :cite:p:`mooij_2016`.
 
     Parameters
     ----------
@@ -168,18 +145,13 @@ class EntropyDifferenceScore(BaseBivariateScore):
 
     _tags = {"name": "entropy", "supported_algorithms": ["igci"]}
 
-    def __init__(
-        self,
-        method="spacing",
-        window_length=None,
-        base=None,
-    ):
+    def __init__(self, method="spacing", window_length=None, base=None):
         self.method = method
         self.window_length = window_length
         self.base = base
         super().__init__()
 
-    def __call__(self, x, y) -> float:
+    def __call__(self, x, y):
         if self.method == "spacing":
             if self.window_length is not None:
                 raise ValueError("window_length is not supported by the spacing estimator.")
@@ -190,7 +162,7 @@ class EntropyDifferenceScore(BaseBivariateScore):
             "window_length": self.window_length,
             "base": self.base,
         }
-        return _scipy_entropy(y, **entropy_kwargs) - _scipy_entropy(x, **entropy_kwargs)
+        return differential_entropy(y, **entropy_kwargs) - differential_entropy(x, **entropy_kwargs)
 
 
 class GaussScore(BaseBivariateScore):
@@ -204,51 +176,36 @@ class GaussScore(BaseBivariateScore):
 
     _tags = {"name": "gauss", "supported_algorithms": ["anm"]}
 
-    def __call__(self, x, y) -> float:
-        score = np.log(np.var(np.asarray(x))) + np.log(np.var(np.asarray(y)))
-        return _ensure_finite(score)
+    def __call__(self, x, y):
+        return np.log(np.var(x)) + np.log(np.var(y))
 
 
 class SlopeScore(BaseBivariateScore):
     """
-    Repetition-aware log-slope score for IGCI :cite:p:`mooij_2016`.
+    Log-slope score for IGCI :cite:p:`mooij_2016`.
 
-    Computes a weighted average of the log slopes between neighboring observations after sorting
-    by ``x``. Repeated ``x`` values are weighted by their frequency, and zero ``y`` spacings are ignored.
+    Sorts observations by ``x``, removes repeated ``x`` values, and averages the log slopes between
+    neighboring observations. Zero ``y`` spacings are ignored.
     """
 
     _tags = {"name": "slope", "supported_algorithms": ["igci"]}
 
-    def __call__(self, x, y) -> float:
+    def __call__(self, x, y):
         x = np.asarray(x)
         y = np.asarray(y)
 
-        order = np.argsort(x, kind="stable")
-        x = x[order]
-        y = y[order]
-
-        run_start = np.r_[0, np.flatnonzero(np.diff(x)) + 1]
-        multiplicities = np.diff(np.r_[run_start, x.size])
-        x = x[run_start]
-        y = y[run_start]
-
+        x, unique_indices = np.unique(x, return_index=True)
         if x.size < 2:
-            raise ValueError(
-                "SlopeScore requires sufficiently distinct x values after removing repetitions; "
-                "no valid pairs remained."
-            )
+            raise ValueError("SlopeScore requires at least two distinct x values.")
+        y = y[unique_indices]
 
         x_diff = np.diff(x)
         y_diff = np.diff(y)
-        valid = y_diff != 0
+        valid = (x_diff != 0) & (y_diff != 0)
         if not valid.any():
-            raise ValueError("SlopeScore requires at least one non-zero y spacing.")
+            raise ValueError("SlopeScore requires at least one pair with non-zero x and y spacings.")
 
-        score = np.average(
-            np.log(np.abs(y_diff[valid] / x_diff[valid])),
-            weights=multiplicities[:-1][valid],
-        )
-        return _ensure_finite(score)
+        return np.mean(np.log(np.abs(y_diff[valid] / x_diff[valid])))
 
 
 def get_bivariate_score(score, algorithm):
@@ -273,8 +230,13 @@ def get_bivariate_score(score, algorithm):
     """
     algorithm = algorithm.lower()
 
+    if isinstance(score, BaseBivariateScore):
+        if algorithm not in score.get_tag("supported_algorithms"):
+            raise ValueError(f"{type(score).__name__} does not support {algorithm.upper()}.")
+        return score
+
     if isinstance(score, str):
-        scores = all_objects(
+        score_classes = all_objects(
             object_types=BaseBivariateScore,
             package_name="pgmpy.causal_discovery",
             return_names=False,
@@ -283,8 +245,8 @@ def get_bivariate_score(score, algorithm):
                 "supported_algorithms": algorithm,
             },
         )
-        if scores:
-            return scores[0]()
+        if score_classes:
+            return score_classes[0]()
         raise ValueError(f"Unknown {algorithm.upper()} score: {score!r}.")
 
     if callable(score) and not isinstance(score, type):

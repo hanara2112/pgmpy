@@ -76,9 +76,9 @@ class ANM(BaseCausalDiscovery):
     >>> anm = ANM().fit(df)
     >>> anm.causal_graph_.edges()
     OutEdgeView([('X', 'Y')])
-    >>> round(anm.forward_score_, 5)
+    >>> round(float(anm.forward_score_), 5)
     0.00104
-    >>> round(anm.backward_score_, 5)
+    >>> round(float(anm.backward_score_), 5)
     0.00543
 
     The scoring method can be selected by name:
@@ -145,7 +145,7 @@ class ANM(BaseCausalDiscovery):
 
         return self
 
-    def _direction_score(self, cause: pd.DataFrame, effect: pd.Series, score_fn) -> float:
+    def _direction_score(self, cause: pd.DataFrame, effect: pd.Series, score_fn):
         """
         Score the residual dependence for the ``cause -> effect`` direction.
 
