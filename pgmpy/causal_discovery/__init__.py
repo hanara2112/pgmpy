@@ -7,6 +7,7 @@ from .HillClimbSearch import HillClimbSearch
 from .IGCI import IGCI
 from .LLMPairwise import LLMPairwise
 from .PC import PC
+from .SP import SP
 from .TAN import TAN
 from .TOPIC import TOPIC
 
@@ -22,4 +23,5 @@ __all__ = [
     "PC",
     "TAN",
     "TOPIC",
+    "SP",
 ]
