@@ -1,11 +1,13 @@
+from collections.abc import Callable
+
 import networkx as nx
 import numpy as np
 import pandas as pd
-from sklearn.base import clone
+from sklearn.base import BaseEstimator, clone
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
-from pgmpy.causal_discovery.bivariate_scores import get_bivariate_score
+from pgmpy.causal_discovery.bivariate_scores import BaseBivariateScore, get_bivariate_score
 from pgmpy.utils import get_dataset_type
 
 
@@ -98,7 +100,11 @@ class ANM(BaseCausalDiscovery):
 
     """
 
-    def __init__(self, regressor=None, score="independence"):
+    def __init__(
+        self,
+        regressor: BaseEstimator | None = None,
+        score: str | BaseBivariateScore | Callable[[np.typing.ArrayLike, np.typing.ArrayLike], float] = "independence",
+    ) -> None:
         self.regressor = regressor
         self.score = score
 
@@ -107,7 +113,7 @@ class ANM(BaseCausalDiscovery):
         tags.input_tags.categorical = False
         return tags
 
-    def _fit(self, X: pd.DataFrame):
+    def _fit(self, X: pd.DataFrame) -> "ANM":
         """
         The fitting procedure for the ANM algorithm.
 
@@ -145,7 +151,12 @@ class ANM(BaseCausalDiscovery):
 
         return self
 
-    def _direction_score(self, cause: pd.DataFrame, effect: pd.Series, score_fn):
+    def _direction_score(
+        self,
+        cause: pd.DataFrame,
+        effect: pd.Series,
+        score_fn: Callable[[np.typing.ArrayLike, np.typing.ArrayLike], float],
+    ) -> float:
         """
         Score the residual dependence for the ``cause -> effect`` direction.
 

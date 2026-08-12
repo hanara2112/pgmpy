@@ -1,9 +1,12 @@
+from collections.abc import Callable
+
 import networkx as nx
+import numpy as np
 import pandas as pd
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
-from pgmpy.causal_discovery.bivariate_scores import get_bivariate_score
+from pgmpy.causal_discovery.bivariate_scores import BaseBivariateScore, get_bivariate_score
 from pgmpy.utils import get_dataset_type
 
 
@@ -77,7 +80,11 @@ class IGCI(BaseCausalDiscovery):
 
     """
 
-    def __init__(self, score="slope", ref_measure="uniform"):
+    def __init__(
+        self,
+        score: str | BaseBivariateScore | Callable[[np.typing.ArrayLike, np.typing.ArrayLike], float] = "slope",
+        ref_measure: str = "uniform",
+    ) -> None:
         self.score = score
         self.ref_measure = ref_measure
 
@@ -86,7 +93,7 @@ class IGCI(BaseCausalDiscovery):
         tags.input_tags.categorical = False
         return tags
 
-    def _fit(self, X: pd.DataFrame):
+    def _fit(self, X: pd.DataFrame) -> "IGCI":
         """
         Orient the edge between the two variables in ``X`` using IGCI.
 

@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import numpy as np
 import pandas as pd
 from scipy.special import psi
@@ -8,7 +10,7 @@ from skbase.lookup import all_objects
 from pgmpy.ci_tests import BaseCITest, get_ci_test
 
 
-def _spacing_entropy(values, base=None):
+def _spacing_entropy(values: np.typing.ArrayLike, base: float | None = None) -> float:
     """Estimate differential entropy using consecutive sorted spacings."""
     if base is not None and (base <= 0 or base == 1):
         raise ValueError("base must be positive and not equal to 1.")
@@ -37,7 +39,7 @@ class BaseBivariateScore(BaseObject):
 
     _tags = {"name": None, "supported_algorithms": []}
 
-    def __call__(self, x, y):
+    def __call__(self, x: np.typing.ArrayLike, y: np.typing.ArrayLike) -> float:
         raise NotImplementedError
 
 
@@ -64,12 +66,12 @@ class IndependenceScore(BaseBivariateScore):
 
     _tags = {"name": "independence", "supported_algorithms": ["anm"]}
 
-    def __init__(self, ci_test="pearsonr", criterion="effect_size"):
+    def __init__(self, ci_test: str | BaseCITest = "pearsonr", criterion: str = "effect_size") -> None:
         self.ci_test = ci_test
         self.criterion = criterion
         super().__init__()
 
-    def __call__(self, x, y):
+    def __call__(self, x: np.typing.ArrayLike, y: np.typing.ArrayLike) -> float:
         data = pd.DataFrame({"_x": np.asarray(x), "_y": np.asarray(y)})
         if isinstance(self.ci_test, BaseCITest):
             test = self.ci_test.clone().set_params(data=data)
@@ -111,13 +113,18 @@ class EntropyScore(BaseBivariateScore):
 
     _tags = {"name": "entropy", "supported_algorithms": ["anm"]}
 
-    def __init__(self, method="auto", window_length=None, base=None):
+    def __init__(
+        self,
+        method: str = "auto",
+        window_length: int | None = None,
+        base: float | None = None,
+    ) -> None:
         self.method = method
         self.window_length = window_length
         self.base = base
         super().__init__()
 
-    def __call__(self, x, y):
+    def __call__(self, x: np.typing.ArrayLike, y: np.typing.ArrayLike) -> float:
         entropy_kwargs = {
             "method": self.method,
             "base": self.base,
@@ -146,13 +153,18 @@ class EntropyDifferenceScore(BaseBivariateScore):
 
     _tags = {"name": "entropy", "supported_algorithms": ["igci"]}
 
-    def __init__(self, method="spacing", window_length=None, base=None):
+    def __init__(
+        self,
+        method: str = "spacing",
+        window_length: int | None = None,
+        base: float | None = None,
+    ) -> None:
         self.method = method
         self.window_length = window_length
         self.base = base
         super().__init__()
 
-    def __call__(self, x, y):
+    def __call__(self, x: np.typing.ArrayLike, y: np.typing.ArrayLike) -> float:
         if self.method == "spacing":
             if self.window_length is not None:
                 raise ValueError("window_length is not supported by the spacing estimator.")
@@ -178,7 +190,7 @@ class GaussScore(BaseBivariateScore):
 
     _tags = {"name": "gauss", "supported_algorithms": ["anm"]}
 
-    def __call__(self, x, y):
+    def __call__(self, x: np.typing.ArrayLike, y: np.typing.ArrayLike) -> float:
         return np.log(np.var(x)) + np.log(np.var(y))
 
 
@@ -192,7 +204,7 @@ class SlopeScore(BaseBivariateScore):
 
     _tags = {"name": "slope", "supported_algorithms": ["igci"]}
 
-    def __call__(self, x, y):
+    def __call__(self, x: np.typing.ArrayLike, y: np.typing.ArrayLike) -> float:
         x = np.asarray(x)
         y = np.asarray(y)
 
@@ -210,7 +222,10 @@ class SlopeScore(BaseBivariateScore):
         return np.mean(np.log(np.abs(y_diff[valid] / x_diff[valid])))
 
 
-def get_bivariate_score(score, algorithm):
+def get_bivariate_score(
+    score: str | BaseBivariateScore | Callable[[np.typing.ArrayLike, np.typing.ArrayLike], float],
+    algorithm: str,
+) -> BaseBivariateScore | Callable[[np.typing.ArrayLike, np.typing.ArrayLike], float]:
     """Return a score selected by name or supplied by the user.
 
     Parameters
