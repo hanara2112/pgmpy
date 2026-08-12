@@ -120,9 +120,10 @@ class EntropyScore(BaseBivariateScore):
     def __call__(self, x, y):
         entropy_kwargs = {
             "method": self.method,
-            "window_length": self.window_length,
             "base": self.base,
         }
+        if self.window_length is not None:
+            entropy_kwargs["window_length"] = self.window_length
         return differential_entropy(x, **entropy_kwargs) + differential_entropy(y, **entropy_kwargs)
 
 
@@ -159,9 +160,10 @@ class EntropyDifferenceScore(BaseBivariateScore):
 
         entropy_kwargs = {
             "method": self.method,
-            "window_length": self.window_length,
             "base": self.base,
         }
+        if self.window_length is not None:
+            entropy_kwargs["window_length"] = self.window_length
         return differential_entropy(y, **entropy_kwargs) - differential_entropy(x, **entropy_kwargs)
 
 
