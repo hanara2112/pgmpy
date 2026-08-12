@@ -27,7 +27,7 @@ class IGCI(BaseCausalDiscovery):
 
     Parameters
     ----------
-    score : str, BaseBivariateScore instance, or callable, default="slope"
+    scoring_method : str, BaseBivariateScore instance, or callable, default="slope"
         Score used to compare the two directions. Use ``"slope"``, ``"entropy"``, a configured
         score object, or a callable of the form ``score(x, y) -> float``.
 
@@ -70,7 +70,7 @@ class IGCI(BaseCausalDiscovery):
     0.22245
     >>> round(float(igci.backward_score_), 5)
     1.66886
-    >>> round(float(IGCI(score="entropy").fit(df).forward_score_), 5)
+    >>> round(float(IGCI(scoring_method="entropy").fit(df).forward_score_), 5)
     -0.70337
 
     References
@@ -82,10 +82,12 @@ class IGCI(BaseCausalDiscovery):
 
     def __init__(
         self,
-        score: str | BaseBivariateScore | Callable[[np.typing.ArrayLike, np.typing.ArrayLike], float] = "slope",
+        scoring_method: str
+        | BaseBivariateScore
+        | Callable[[np.typing.ArrayLike, np.typing.ArrayLike], float] = "slope",
         ref_measure: str = "uniform",
     ) -> None:
-        self.score = score
+        self.scoring_method = scoring_method
         self.ref_measure = ref_measure
 
     def __sklearn_tags__(self):
@@ -111,7 +113,7 @@ class IGCI(BaseCausalDiscovery):
         # Step 1: Validate hyperparameters and resolve the score function.
         if self.ref_measure not in ("uniform", "gaussian"):
             raise ValueError(f"ref_measure must be one of ('uniform', 'gaussian'). Got: {self.ref_measure!r}")
-        score = get_bivariate_score(self.score, algorithm="igci")
+        score = get_bivariate_score(self.scoring_method, algorithm="igci")
 
         # Step 2: Validate the input data.
         if X.shape[1] != 2:

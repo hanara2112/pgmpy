@@ -17,8 +17,8 @@ def nonlinear_data():
 def test_init():
     est = IGCI()
     assert est.get_params() == {
-        "score": "slope",
         "ref_measure": "uniform",
+        "scoring_method": "slope",
     }
 
 
@@ -30,16 +30,17 @@ def test_slope_score(nonlinear_data):
     assert score.get_tag("name") == "slope"
     assert score.get_tag("supported_algorithms") == ["igci"]
 
-    est = IGCI(score="slope").fit(nonlinear_data)
+    est = IGCI(scoring_method="slope").fit(nonlinear_data)
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
     assert est.forward_score_ == pytest.approx(0.19854159536238275, rel=1e-4)
     assert est.backward_score_ == pytest.approx(1.3206465666212361, rel=1e-4)
     assert est.adjacency_matrix_.loc["X", "Y"] == 1
+    assert est.score(true_graph=est.causal_graph_, metric="SHD") == 0
 
     rng = np.random.default_rng(1)
     x = np.round(rng.uniform(0, 1, 500), 2)
     y = x**3 + rng.normal(0, 1e-3, 500)
-    est = IGCI(score="slope").fit(pd.DataFrame({"X": x, "Y": y}))
+    est = IGCI(scoring_method="slope").fit(pd.DataFrame({"X": x, "Y": y}))
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
 
     with pytest.raises(ValueError, match="two distinct x values"):
@@ -57,7 +58,7 @@ def test_entropy_score(nonlinear_data):
     assert score.get_tag("name") == "entropy"
     assert score.get_tag("supported_algorithms") == ["igci"]
 
-    est = IGCI(score="entropy").fit(nonlinear_data)
+    est = IGCI(scoring_method="entropy").fit(nonlinear_data)
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
 
     x = np.linspace(0.1, 1, 100)
@@ -71,7 +72,7 @@ def test_entropy_score(nonlinear_data):
         score([0, 0, 1], [0, 1, 2])
 
     with pytest.raises(ValueError):
-        IGCI(score=EntropyDifferenceScore(method="bogus")).fit(nonlinear_data)
+        IGCI(scoring_method=EntropyDifferenceScore(method="bogus")).fit(nonlinear_data)
 
 
 def test_custom_score():
@@ -87,27 +88,27 @@ def test_reference_measures(nonlinear_data, ref_measure):
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
 
 
-def test_clone_preserves_score_instance():
+def test_clone_preserves_scoring_method_instance():
     from sklearn.base import clone
 
     from pgmpy.causal_discovery.bivariate_scores import EntropyDifferenceScore
 
-    cloned = clone(IGCI(score=EntropyDifferenceScore(method="vasicek")))
-    assert isinstance(cloned.score, EntropyDifferenceScore)
-    assert cloned.score.method == "vasicek"
+    cloned = clone(IGCI(scoring_method=EntropyDifferenceScore(method="vasicek")))
+    assert isinstance(cloned.scoring_method, EntropyDifferenceScore)
+    assert cloned.scoring_method.method == "vasicek"
 
 
 def test_incompatible_score_instance_raises(nonlinear_data):
     from pgmpy.causal_discovery.bivariate_scores import GaussScore
 
     with pytest.raises(ValueError, match="GaussScore does not support IGCI"):
-        IGCI(score=GaussScore()).fit(nonlinear_data)
+        IGCI(scoring_method=GaussScore()).fit(nonlinear_data)
 
 
 @pytest.mark.parametrize(
     ("estimator", "data", "match"),
     [
-        (IGCI(score="gauss"), pd.DataFrame({"X": [0, 1], "Y": [0, 1]}), "IGCI"),
+        (IGCI(scoring_method="gauss"), pd.DataFrame({"X": [0, 1], "Y": [0, 1]}), "IGCI"),
         (IGCI(ref_measure="bogus"), pd.DataFrame({"X": [0, 1], "Y": [0, 1]}), "ref_measure"),
         (IGCI(), pd.DataFrame({"X": [1, 1, 1], "Y": [1, 2, 3]}), "constant"),
         (IGCI(), pd.DataFrame({"X": [0, 1], "Y": [1, 2], "Z": [2, 1]}), "exactly two"),
