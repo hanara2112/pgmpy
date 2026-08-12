@@ -71,6 +71,14 @@ def test_score_instance_is_used(nonlinear_data):
         assert list(est.causal_graph_.edges()) == [("X", "Y")]
 
 
+def test_nan_or_tied_direction_scores_raise(nonlinear_data):
+    from sklearn.linear_model import LinearRegression
+
+    for score in (np.nan, 0.0):
+        with pytest.raises(ValueError):
+            ANM(regressor=LinearRegression(), scoring_method=lambda x, y: score).fit(nonlinear_data)
+
+
 def test_ci_test_instance_uses_score_input():
     from pgmpy.causal_discovery.bivariate_scores import IndependenceScore
     from pgmpy.ci_tests import Pearsonr

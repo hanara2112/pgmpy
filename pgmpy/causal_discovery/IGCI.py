@@ -22,8 +22,9 @@ class IGCI(BaseCausalDiscovery):
     - ``Y = f(X)`` is monotonic and close to deterministic (little noise).
     - The cause distribution and ``f`` are independent.
 
-    IGCI scores each direction and orients toward the lower score. Ties use the
-    first column as cause.
+    IGCI scores each direction and orients toward the lower score. If a score
+    is ``NaN`` or the directional scores are equal, the method raises a
+    :class:`ValueError` because it cannot determine a causal direction.
 
     Parameters
     ----------
@@ -137,11 +138,22 @@ class IGCI(BaseCausalDiscovery):
             y_norm = (y_vals - y_vals.mean()) / y_vals.std()
 
         # Step 4: Score both directions.
-        self.forward_score_ = score(x_norm, y_norm)
-        self.backward_score_ = score(y_norm, x_norm)
+        forward_score = score(x_norm, y_norm)
+        backward_score = score(y_norm, x_norm)
+
+        if np.isnan(forward_score) or np.isnan(backward_score):
+            raise ValueError("IGCI scoring_method returned NaN; cannot determine a causal direction.")
+        if forward_score == backward_score:
+            raise ValueError(
+                f"IGCI could not determine a causal direction because both directions produced the same score: "
+                f"{forward_score!r}."
+            )
+
+        self.forward_score_ = forward_score
+        self.backward_score_ = backward_score
 
         # Step 5: Orient the edge and store the fitted attributes.
-        edge = (x, y) if self.forward_score_ <= self.backward_score_ else (y, x)
+        edge = (x, y) if self.forward_score_ < self.backward_score_ else (y, x)
         self.causal_graph_ = DAG([edge])
         self.adjacency_matrix_ = nx.to_pandas_adjacency(self.causal_graph_, nodelist=[x, y], weight=None, dtype="int")
 

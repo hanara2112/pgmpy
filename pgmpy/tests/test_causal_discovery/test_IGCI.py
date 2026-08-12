@@ -82,6 +82,12 @@ def test_custom_score():
     assert get_bivariate_score(score, algorithm="igci") is score
 
 
+def test_nan_or_tied_direction_scores_raise(nonlinear_data):
+    for score in (np.nan, 0.0):
+        with pytest.raises(ValueError):
+            IGCI(scoring_method=lambda x, y: score).fit(nonlinear_data)
+
+
 @pytest.mark.parametrize("ref_measure", ["uniform", "gaussian"])
 def test_reference_measures(nonlinear_data, ref_measure):
     est = IGCI(ref_measure=ref_measure).fit(nonlinear_data)

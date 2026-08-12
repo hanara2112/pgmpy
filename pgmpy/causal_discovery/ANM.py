@@ -23,7 +23,8 @@ class ANM(BaseCausalDiscovery):
     - The causal direction is identifiable only if the function ``f`` is nonlinear, or if the noise is non-Gaussian.
 
     The method fits a regressor in both directions and orients the edge toward the one whose residuals are more
-    independent of the input.
+    independent of the input. If a score is ``NaN`` or the directional scores are equal, the method raises a
+    :class:`ValueError` because it cannot determine a causal direction.
 
     Parameters
     ----------
@@ -143,11 +144,22 @@ class ANM(BaseCausalDiscovery):
 
         # Step 1: Fit models in both directions and compute the residual-dependence scores.
         score_fn = get_bivariate_score(self.scoring_method, algorithm="anm")
-        self.forward_score_ = self._direction_score(cause=X[[x]], effect=X[y], score_fn=score_fn)
-        self.backward_score_ = self._direction_score(cause=X[[y]], effect=X[x], score_fn=score_fn)
+        forward_score = self._direction_score(cause=X[[x]], effect=X[y], score_fn=score_fn)
+        backward_score = self._direction_score(cause=X[[y]], effect=X[x], score_fn=score_fn)
+
+        if np.isnan(forward_score) or np.isnan(backward_score):
+            raise ValueError("ANM scoring_method returned NaN; cannot determine a causal direction.")
+        if forward_score == backward_score:
+            raise ValueError(
+                f"ANM could not determine a causal direction because both directions produced the same score: "
+                f"{forward_score!r}."
+            )
+
+        self.forward_score_ = forward_score
+        self.backward_score_ = backward_score
 
         # Step 2: Orient the edge toward the direction with the smaller score.
-        edge = (x, y) if self.forward_score_ <= self.backward_score_ else (y, x)
+        edge = (x, y) if self.forward_score_ < self.backward_score_ else (y, x)
         self.causal_graph_ = DAG([edge])
         self.adjacency_matrix_ = nx.to_pandas_adjacency(self.causal_graph_, nodelist=[x, y], weight=None, dtype="int")
 
