@@ -32,7 +32,7 @@ class ANM(BaseCausalDiscovery):
         with an RBF plus white-noise kernel is used, with the input and target standardized so that the unit-scale
         kernel initialization is appropriate regardless of the scale of the data.
 
-    score : str, BaseBivariateScore instance, or callable, default="independence"
+    scoring_method : str, BaseBivariateScore instance, or callable, default="independence"
         How a candidate direction is scored from the cause and the regression residuals. A smaller score means the
         residuals are more independent of the cause, i.e. a better-fitting direction. One of:
 
@@ -53,8 +53,8 @@ class ANM(BaseCausalDiscovery):
         Adjacency matrix representation of ``causal_graph_``.
 
     forward_score_ : float
-        Direction score for the first-column -> second-column direction, as computed by ``score``. A smaller value
-        means the residuals are more independent of the cause.
+        Direction score for the first-column -> second-column direction, as computed by ``scoring_method``. A
+        smaller value means the residuals are more independent of the cause.
 
     backward_score_ : float
         Direction score for the second-column -> first-column direction. The edge is oriented toward whichever
@@ -85,12 +85,12 @@ class ANM(BaseCausalDiscovery):
 
     The scoring method can be selected by name:
 
-    >>> ANM(score="entropy").fit(df).causal_graph_.edges()
+    >>> ANM(scoring_method="entropy").fit(df).causal_graph_.edges()
     OutEdgeView([('X', 'Y')])
 
     or passed as an object for full control over its hyperparameters:
 
-    >>> ANM(score=EntropyScore(method="vasicek")).fit(df).causal_graph_.edges()
+    >>> ANM(scoring_method=EntropyScore(method="vasicek")).fit(df).causal_graph_.edges()
     OutEdgeView([('X', 'Y')])
 
     References
@@ -103,10 +103,12 @@ class ANM(BaseCausalDiscovery):
     def __init__(
         self,
         regressor: BaseEstimator | None = None,
-        score: str | BaseBivariateScore | Callable[[np.typing.ArrayLike, np.typing.ArrayLike], float] = "independence",
+        scoring_method: str
+        | BaseBivariateScore
+        | Callable[[np.typing.ArrayLike, np.typing.ArrayLike], float] = "independence",
     ) -> None:
         self.regressor = regressor
-        self.score = score
+        self.scoring_method = scoring_method
 
     def __sklearn_tags__(self):
         tags = super().__sklearn_tags__()
@@ -140,7 +142,7 @@ class ANM(BaseCausalDiscovery):
                 raise ValueError(f"Variable '{col}' is constant; ANM requires non-constant variables.")
 
         # Step 1: Fit models in both directions and compute the residual-dependence scores.
-        score_fn = get_bivariate_score(self.score, algorithm="anm")
+        score_fn = get_bivariate_score(self.scoring_method, algorithm="anm")
         self.forward_score_ = self._direction_score(cause=X[[x]], effect=X[y], score_fn=score_fn)
         self.backward_score_ = self._direction_score(cause=X[[y]], effect=X[x], score_fn=score_fn)
 
@@ -161,7 +163,7 @@ class ANM(BaseCausalDiscovery):
         Score the residual dependence for the ``cause -> effect`` direction.
 
         Fits the regressor to predict ``effect`` from ``cause``, then scores how dependent the resulting residuals
-        are on ``cause`` using the configured ``score``.
+        are on ``cause`` using the configured scoring method.
 
         Parameters
         ----------
@@ -177,8 +179,8 @@ class ANM(BaseCausalDiscovery):
         Returns
         -------
         score : float
-            The ``score`` evaluated on ``cause`` and the residuals. A smaller value indicates more independent
-            residuals, i.e. a better-fitting direction.
+            The configured scoring method evaluated on ``cause`` and the residuals. A smaller value indicates more
+            independent residuals, i.e. a better-fitting direction.
         """
         if self.regressor is None:
             from sklearn.gaussian_process import GaussianProcessRegressor

@@ -16,7 +16,7 @@ def nonlinear_data(n=1000):
 
 def test_init():
     est = ANM()
-    assert est.get_params() == {"regressor": None, "score": "independence"}
+    assert est.get_params() == {"regressor": None, "scoring_method": "independence"}
 
 
 def test_score_algorithm_tags():
@@ -42,6 +42,7 @@ def test_fit_recovers_direction(nonlinear_data):
     assert est.forward_score_ < est.backward_score_
     assert est.adjacency_matrix_.loc["X", "Y"] == 1
     assert est.adjacency_matrix_.loc["Y", "X"] == 0
+    assert est.score(true_graph=est.causal_graph_, metric="SHD") == 0
 
 
 def test_reproducible(nonlinear_data):
@@ -53,7 +54,7 @@ def test_reproducible(nonlinear_data):
 
 @pytest.mark.parametrize("score", ["independence", "entropy", "gauss"])
 def test_builtin_scores_recover_direction(nonlinear_data, score):
-    est = ANM(score=score).fit(nonlinear_data)
+    est = ANM(scoring_method=score).fit(nonlinear_data)
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
     assert est.forward_score_ < est.backward_score_
 
@@ -66,7 +67,7 @@ def test_score_instance_is_used(nonlinear_data):
         IndependenceScore(ci_test="pearsonr"),
         IndependenceScore(criterion="p_value"),
     ):
-        est = ANM(score=score).fit(nonlinear_data)
+        est = ANM(scoring_method=score).fit(nonlinear_data)
         assert list(est.causal_graph_.edges()) == [("X", "Y")]
 
 
@@ -84,26 +85,26 @@ def test_score_hyperparameters_surface_errors(nonlinear_data):
     from pgmpy.causal_discovery.bivariate_scores import EntropyScore, IndependenceScore
 
     with pytest.raises(ValueError):  # scipy rejects an unknown differential_entropy method
-        ANM(score=EntropyScore(method="not_a_method")).fit(nonlinear_data)
+        ANM(scoring_method=EntropyScore(method="not_a_method")).fit(nonlinear_data)
     with pytest.raises(ValueError):  # get_ci_test rejects an unknown test name
-        ANM(score=IndependenceScore(ci_test="not_a_test")).fit(nonlinear_data)
+        ANM(scoring_method=IndependenceScore(ci_test="not_a_test")).fit(nonlinear_data)
 
 
-def test_clone_preserves_score_instance():
+def test_clone_preserves_scoring_method_instance():
     from sklearn.base import clone
 
     from pgmpy.causal_discovery.bivariate_scores import EntropyScore
 
-    cloned = clone(ANM(score=EntropyScore(method="vasicek")))
-    assert isinstance(cloned.score, EntropyScore)
-    assert cloned.score.method == "vasicek"
+    cloned = clone(ANM(scoring_method=EntropyScore(method="vasicek")))
+    assert isinstance(cloned.scoring_method, EntropyScore)
+    assert cloned.scoring_method.method == "vasicek"
 
 
 def test_incompatible_score_instance_raises(nonlinear_data):
     from pgmpy.causal_discovery.bivariate_scores import SlopeScore
 
     with pytest.raises(ValueError, match="SlopeScore does not support ANM"):
-        ANM(score=SlopeScore()).fit(nonlinear_data)
+        ANM(scoring_method=SlopeScore()).fit(nonlinear_data)
 
 
 @pytest.mark.parametrize(
