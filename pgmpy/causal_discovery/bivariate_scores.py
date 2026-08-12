@@ -198,8 +198,9 @@ class SlopeScore(BaseBivariateScore):
     """
     Log-slope score for IGCI :cite:p:`mooij_2016`.
 
-    Sorts observations by ``x``, removes repeated ``x`` values, and averages the log slopes between
-    neighboring observations. Zero ``y`` spacings are ignored.
+    Assumes continuous numeric inputs. Sorts observations by ``x`` and then ``y``, and averages ``y``
+    within groups of repeated ``x`` values. Following Equation 21, each neighboring log slope is
+    weighted by the multiplicity of its left ``x`` value. Zero ``y`` spacings are ignored.
     """
 
     _tags = {"name": "slope", "supported_algorithms": ["igci"]}
@@ -208,18 +209,25 @@ class SlopeScore(BaseBivariateScore):
         x = np.asarray(x)
         y = np.asarray(y)
 
-        x, unique_indices = np.unique(x, return_index=True)
+        order = np.lexsort((y, x))
+        x = x[order]
+        y = y[order]
+
+        x, run_start, multiplicities = np.unique(x, return_index=True, return_counts=True)
         if x.size < 2:
             raise ValueError("SlopeScore requires at least two distinct x values.")
-        y = y[unique_indices]
+        y = np.add.reduceat(y, run_start) / multiplicities
 
         x_diff = np.diff(x)
         y_diff = np.diff(y)
-        valid = (x_diff != 0) & (y_diff != 0)
+        valid = y_diff != 0
         if not valid.any():
             raise ValueError("SlopeScore requires at least one pair with non-zero x and y spacings.")
 
-        return np.mean(np.log(np.abs(y_diff[valid] / x_diff[valid])))
+        return np.average(
+            np.log(np.abs(y_diff[valid] / x_diff[valid])),
+            weights=multiplicities[:-1][valid],
+        )
 
 
 def get_bivariate_score(
