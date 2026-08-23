@@ -123,12 +123,13 @@ class KCI(HSIC):
 
         if kernel is None or isinstance(kernel, Kernel):
             kernel_X = kernel_Y = kernel_Z = kernel
-        elif isinstance(kernel, tuple) and len(kernel) == 3:
+        elif isinstance(kernel, tuple) and len(kernel) == 3 and all(isinstance(item, Kernel) for item in kernel):
             kernel_X, kernel_Y, kernel_Z = kernel
         else:
             raise ValueError("kernel must be a sklearn Kernel, a tuple of three Kernels, or None")
 
-        super().__init__(data=data, kernel=(kernel_X, kernel_Y), bandwidth=bandwidth, use_cache=use_cache)
+        hsic_kernel = None if kernel is None else (kernel_X, kernel_Y)
+        super().__init__(data=data, kernel=hsic_kernel, bandwidth=bandwidth, use_cache=use_cache)
         self.kernel = kernel
         self.kernel_Z_ = kernel_Z
         self.epsilon = epsilon
@@ -194,7 +195,8 @@ class KCI(HSIC):
         y = (y - y.mean()) / y_std if y_std > 0 else np.zeros_like(y)
 
         z_std = z.std(ddof=1, axis=0)
-        z = np.where(z_std > 0, (z - z.mean(axis=0)) / z_std, 0.0)
+        z_centered = z - z.mean(axis=0)
+        z = np.divide(z_centered, z_std, out=np.zeros_like(z_centered), where=z_std > 0)
 
         test_stat, p_value = self._conditional_test(x, y, z)
         return _CITestResult(statistic=test_stat, p_value=p_value, effect_size=None)

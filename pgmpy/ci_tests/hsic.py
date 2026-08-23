@@ -121,7 +121,7 @@ class HSIC(BaseCITest):
 
         if kernel is None or isinstance(kernel, Kernel):
             self.kernel_X_ = self.kernel_Y_ = kernel
-        elif isinstance(kernel, tuple) and len(kernel) == 2:
+        elif isinstance(kernel, tuple) and len(kernel) == 2 and all(isinstance(item, Kernel) for item in kernel):
             self.kernel_X_, self.kernel_Y_ = kernel
         else:
             raise ValueError("kernel must be a sklearn Kernel, a tuple of two Kernels, or None")

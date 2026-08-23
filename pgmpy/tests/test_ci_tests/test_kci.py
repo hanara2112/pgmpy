@@ -54,12 +54,19 @@ class TestKCI:
         assert test.statistic_ == pytest.approx(542.8695, abs=0.01)
         assert test.p_value_ < 0.05
 
+        # Constant conditioning columns are ignored without numerical warnings.
+        df_cind = df_cind.assign(C=1.0)
+        with np.errstate(divide="raise", invalid="raise"):
+            assert KCI(data=df_cind)("X", "Y", ["Z", "C"], significance_level=0.05)
+
     def test_custom_kernels(self, kci_data):
         _, _, df_vstruct = kci_data
         # Single kernel shared by X, Y, Z.
         assert not KCI(data=df_vstruct, kernel=RBF(0.5))("X", "Y", ["Z"], significance_level=0.05)
         # Tuple: separate kernels for X, Y, Z.
         assert not KCI(data=df_vstruct, kernel=(RBF(0.5), RBF(0.5), RBF(0.5)))("X", "Y", ["Z"], significance_level=0.05)
+        with pytest.raises(ValueError, match="kernel"):
+            KCI(data=df_vstruct, kernel=(RBF(0.5), RBF(0.5), "not-a-kernel"))
 
     def test_sample_size_and_kci_bandwidth(self):
         lgbn = DAG.from_dagitty("dag{ Z -> X [beta=0.5]; Z -> Y [beta=0.8] }")
@@ -119,4 +126,4 @@ class TestKCICompareCausalLearn:
         test = KCI(data=df)
         test.run_test("X", "Y", ["Z"])
         assert test.statistic_ == pytest.approx(637.5696, abs=0.01)
-        assert test.p_value_ == pytest.approx(0.0, abs=0.001)
+        assert 0.0 < test.p_value_ < 0.001

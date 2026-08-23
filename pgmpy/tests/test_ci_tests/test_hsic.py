@@ -95,6 +95,8 @@ class TestHSIC:
             HSIC(data=df_ind, null_dist="bad")
         with pytest.raises(ValueError, match="n_permutations"):
             HSIC(data=df_ind, n_permutations=0)
+        with pytest.raises(ValueError, match="kernel"):
+            HSIC(data=df_ind, kernel=(RBF(0.5), "not-a-kernel"))
 
 
 class TestHSICCompareCausalLearn:
