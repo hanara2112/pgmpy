@@ -9,43 +9,38 @@ from ._base import BaseCITest, _CITestResult
 
 class HSIC(BaseCITest):
     r"""
-    Hilbert-Schmidt Independence Criterion (HSIC) [1] test for marginal
-    independence of continuous variables.
+    Test whether two continuous variables are independent.
 
-    With double-centered kernel Gram matrices :math:`\tilde K_X, \tilde K_Y`,
-    the V-statistic is
+    HSIC can detect both linear and nonlinear relationships. It checks whether
+    observations that are similar in X also tend to be similar in Y.
 
-    .. math::
-        T = \operatorname{Tr}(\tilde{K}_X \tilde{K}_Y),
-        \quad \tilde{K} = HKH, \quad H = I - \tfrac{1}{n}\mathbf{1}\mathbf{1}^T.
-
-    Under the null, :math:`T` is asymptotically a weighted sum of
-    :math:`\chi^2_1` variables. The p-value is computed either from a
-    moment-matched Gamma approximation with shape :math:`k=\mu^2/\sigma^2`
-    and scale :math:`\theta=\sigma^2/\mu` (closed-form null moments from [2]),
-    or from a permutation test on Y [1]. Returns ``p_value_ = 1.0`` if
-    ``n < 6`` (variance estimator is undefined).
+    Calling the test returns ``True`` when there is not enough evidence to
+    reject independence, and ``False`` when the data indicate a relationship.
+    HSIC does not support conditioning variables; use :class:`KCI` for that.
 
     Parameters
     ----------
     data : pandas.DataFrame
-        The dataset in which to test the independence condition.
-    kernel : Kernel or (Kernel, Kernel), default=None
-        Kernel(s) for X and Y. A single
-        :class:`~sklearn.gaussian_process.kernels.Kernel` is shared by both,
-        while a 2-tuple assigns one kernel to each variable. When None, an RBF
-        kernel built with the ``bandwidth`` heuristic is used (see Notes).
-    bandwidth : str, default="heuristic"
-        RBF length-scale rule used when ``kernel`` is None. One of
-        ``"heuristic"`` or ``"median"`` (see Notes).
-    null_dist : str, default="gamma"
-        Null approximation. ``"gamma"`` [2] is faster but assumes RBF-like
-        kernels; use ``"permutation"`` [1] for non-RBF kernels.
+        Data containing the variables to test. Rows are observations and
+        columns are variables.
+    kernel : sklearn.gaussian_process.kernels.Kernel or tuple of Kernel, default=None
+        Kernel used to compare observations. A single kernel is used for both
+        variables, while a 2-tuple provides one for each. Most users can leave
+        this as None to use automatically configured RBF kernels.
+    bandwidth : {"heuristic", "median"}, default="heuristic"
+        How to choose the RBF kernel width when ``kernel`` is None.
+    null_dist : {"gamma", "permutation"}, default="gamma"
+        How to compute the p-value. ``"gamma"`` is fast and works well with
+        RBF-like kernels. ``"permutation"`` is slower but works with arbitrary
+        kernels.
     n_permutations : int, default=100
-        Number of permutations (used only when ``null_dist="permutation"``).
+        Number of shuffles used for a permutation p-value. More shuffles give
+        a more precise result but take longer.
     seed : int or None, default=None
-        Seed for permutation reproducibility (used only when
-        ``null_dist="permutation"``).
+        Seed for reproducible permutations. Used only when
+        ``null_dist="permutation"``.
+    use_cache : bool, default=True
+        Whether to cache test results for repeated queries.
 
     Examples
     --------
@@ -53,43 +48,50 @@ class HSIC(BaseCITest):
     >>> from pgmpy.ci_tests import HSIC
     >>> data = load_dataset("tubingen/1").data
     >>> test = HSIC(data=data)
+    >>> # False means that independence is rejected at the 5% level.
     >>> test("x", "y", significance_level=0.05)
     False
     >>> round(test.statistic_, 2)
     5468.71
-    >>> round(test.p_value_, 2)
-    0.0
+    >>> f"{test.p_value_:.2e}"
+    '2.97e-67'
 
     Attributes
     ----------
     statistic_ : float
-        The HSIC V-statistic. Set after calling the test.
+        The HSIC test statistic. Larger values indicate stronger evidence of a
+        relationship, but values should not be compared across sample sizes.
     p_value_ : float
         The p-value for the test. Set after calling the test.
     effect_size_ : None
         Not defined for HSIC.
 
+    Raises
+    ------
+    ValueError
+        If a requested variable is constant, conditioning variables are
+        supplied, or an initialization argument is invalid.
+
     Notes
     -----
-    Each variable is standardized (zero mean, unit variance) before the kernel
-    is evaluated. When ``kernel`` is None, the RBF length-scale is set by one of
-    the following heuristics:
+    The variables are standardized before testing. With the default RBF
+    kernels, ``bandwidth="heuristic"`` chooses a width from the sample size,
+    while ``bandwidth="median"`` uses the median distance between observations.
 
-    * ``bandwidth="heuristic"``: a piecewise width chosen from the sample size
-      ``n`` (``0.8`` if ``n < 200``, ``0.5`` if ``n < 1200``, else ``0.3``),
-      scaled by ``1 / sqrt(d)`` for ``d``-dimensional inputs.
-    * ``bandwidth="median"``: ``sqrt(2) * median`` of the pairwise Euclidean
-      distances, falling back to ``1.0`` when the median distance is zero.
-    * For ``null_dist="gamma"``, the statistic is matched to a Gamma using the
-      closed-form null moments of [2]; the ``1/6`` and ``72 = 2*6**2`` constants
-      come from that variance estimator, which needs ``n >= 6``.
+    The statistic is computed from centered kernel matrices:
+
+    .. math::
+        T = \operatorname{Tr}(\tilde{K}_X \tilde{K}_Y).
+
+    The Gamma method approximates the distribution of this statistic when X
+    and Y are independent. It requires at least six observations; for smaller
+    datasets, ``p_value_`` is set to ``1.0``. The permutation method instead
+    estimates this distribution by repeatedly shuffling Y.
 
     References
     ----------
-    .. [1] Gretton et al. (2005). Measuring Statistical Dependence with
-           Hilbert-Schmidt Norms. ALT 2005.
-    .. [2] Gretton et al. (2007). A Kernel Statistical Test of Independence.
-           NeurIPS 2007.
+    - :footcite:t:`gretton_2005`
+    - :footcite:t:`gretton_2007`
     """
 
     _tags = {
@@ -125,6 +127,7 @@ class HSIC(BaseCITest):
             raise ValueError("kernel must be a sklearn Kernel, a tuple of two Kernels, or None")
 
         self.data = data
+        self.kernel = kernel
         self.bandwidth = bandwidth
         self.null_dist = null_dist
         self.n_permutations = n_permutations
@@ -167,7 +170,7 @@ class HSIC(BaseCITest):
         return K - col_mean[None, :] - col_mean[:, None] + col_mean.mean()
 
     def _hsic_gamma_pvalue(self, test_stat, K, L, Kc, Lc):
-        """Gamma p-value using the closed-form null moments of [2] (see Notes)."""
+        """Compute a Gamma p-value using the closed-form null moments."""
         n = K.shape[0]
         if n < 6:
             return 1.0
@@ -187,7 +190,7 @@ class HSIC(BaseCITest):
 
         alpha = mean_hsic**2 / var_hsic
         beta = var_hsic * n / mean_hsic
-        return 1.0 - stats.gamma.cdf(test_stat / n, a=alpha, scale=beta)
+        return stats.gamma.sf(test_stat / n, a=alpha, scale=beta)
 
     def _compute_result(self, X: str, Y: str, Z: list):
         r"""

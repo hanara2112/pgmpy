@@ -36,14 +36,14 @@ class TestHSIC:
         test = HSIC(data=df_dep)
         assert not test("X", "Y", [], significance_level=0.05)
         assert test.statistic_ == pytest.approx(8651.7687, abs=0.01)
-        assert test.p_value_ == pytest.approx(0.0, abs=0.001)
+        assert 0.0 < test.p_value_ < 0.001
 
     def test_nonlinear_dependence(self, hsic_data):
         _, _, df_nonlinear = hsic_data
         test = HSIC(data=df_nonlinear)
         assert not test("X", "Y", [], significance_level=0.05)
         assert test.statistic_ == pytest.approx(3634.9518, abs=0.01)
-        assert test.p_value_ == pytest.approx(0.0, abs=0.001)
+        assert 0.0 < test.p_value_ < 0.001
 
     def test_median_bandwidth(self, hsic_data):
         df_ind, df_dep, _ = hsic_data

@@ -24,6 +24,12 @@ def kci_data():
 
 
 class TestKCI:
+    def test_clone(self, kci_data):
+        df_ind, _, _ = kci_data
+
+        assert HSIC(data=df_ind).clone().kernel is None
+        assert KCI(data=df_ind).clone().kernel is None
+
     def test_unconditional_fallback(self, kci_data):
         df_ind, _, _ = kci_data
         stat_kci, p_kci = KCI(data=df_ind).run_test("X", "Y", [])
@@ -66,6 +72,12 @@ class TestKCI:
         df_large = lgbn.simulate(n_samples=1250, seed=42)
         assert KCI(data=df_large)("X", "Y", ["Z"], significance_level=0.05)
         assert KCI(data=df_large, bandwidth="median")("X", "Y", ["Z"], significance_level=0.05)
+
+    def test_invalid_epsilon(self, kci_data):
+        df_ind, _, _ = kci_data
+
+        with pytest.raises(ValueError, match="epsilon"):
+            KCI(data=df_ind, epsilon=0)
 
 
 class TestKCICompareCausalLearn:

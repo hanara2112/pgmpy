@@ -14,39 +14,39 @@ def _gamma_pvalue_from_moments(test_stat: float, mean: float, var: float) -> flo
 
     k = mean**2 / var
     theta = var / mean
-    return float(1.0 - stats.gamma.cdf(test_stat, a=k, scale=theta))
+    return float(stats.gamma.sf(test_stat, a=k, scale=theta))
 
 
 class KCI(HSIC):
     r"""
-    Kernel-based Conditional Independence (KCI) [1] test for conditional
-    independence of continuous variables.
+    Test whether two continuous variables remain related after accounting for
+    other variables.
 
-    Extends :class:`HSIC` to :math:`X \perp\!\!\!\perp Y \mid Z`; falls back to
-    HSIC when ``Z`` is empty. The conditional statistic is
+    KCI can detect both linear and nonlinear relationships. Use it to test
+    whether X and Y are conditionally independent given one or more variables
+    Z. Calling the test returns ``True`` when there is not enough evidence to
+    reject conditional independence, and ``False`` when a relationship remains
+    after accounting for Z.
 
-    .. math::
-        T_{CI} = \frac{1}{n}\operatorname{Tr}\bigl(\tilde{K}_{\ddot{X}|Z}\tilde{K}_{Y|Z}\bigr),
-
-    where :math:`\tilde{K}_{\cdot|Z} = R_Z \tilde{K}_\cdot R_Z` and
-    :math:`R_Z = \varepsilon (K_Z + \varepsilon I)^{-1}`. Under the null,
-    :math:`T_{CI}` is a weighted sum of :math:`\chi^2_1` approximated by a
-    moment-matched Gamma with shape :math:`k=\mu^2/\sigma^2` and scale
-    :math:`\theta=\sigma^2/\mu`, where :math:`\mu, \sigma^2` are estimated from
-    the eigenspectrum of the residualized kernels [1].
+    When no conditioning variables are provided, KCI uses :class:`HSIC` to
+    perform a standard independence test.
 
     Parameters
     ----------
     data : pandas.DataFrame
-        The dataset in which to test the independence condition.
-    kernel : sklearn Kernel, tuple of three Kernels, or None
-        Kernel(s) for X, Y, Z; a single object is shared across all three.
-        Default: RBF with bandwidth heuristic.
+        Data containing the variables to test. Rows are observations and
+        columns are variables.
+    kernel : sklearn.gaussian_process.kernels.Kernel or tuple of Kernel, default=None
+        Kernel used to compare observations. A single kernel is used for X, Y,
+        and Z, while a 3-tuple provides one for each. Most users can leave this
+        as None to use automatically configured RBF kernels.
     bandwidth : {"heuristic", "median"}, default="heuristic"
-        Bandwidth heuristic when kernel is None.
+        How to choose the RBF kernel width when ``kernel`` is None.
     epsilon : float, default=1e-3
-        Tikhonov regularization for
-        :math:`R_Z = \varepsilon (K_Z + \varepsilon I)^{-1}`.
+        Small positive value used for numerical stability. Most users can
+        leave this at its default.
+    use_cache : bool, default=True
+        Whether to cache test results for repeated queries.
 
     Examples
     --------
@@ -56,6 +56,7 @@ class KCI(HSIC):
     >>> rng = np.random.default_rng(seed=42)
     >>> data = pd.DataFrame(rng.standard_normal((300, 3)), columns=["X", "Y", "Z"])
     >>> test = KCI(data=data)
+    >>> # True means conditional independence is not rejected at the 5% level.
     >>> test("X", "Y", ["Z"], significance_level=0.05)
     True
     >>> round(test.statistic_, 2)
@@ -66,18 +67,39 @@ class KCI(HSIC):
     Attributes
     ----------
     statistic_ : float
-        The KCI test statistic. Set after calling the test.
+        The KCI test statistic. Larger values indicate stronger evidence of a
+        remaining relationship.
     p_value_ : float
         The p-value for the test. Set after calling the test.
     effect_size_ : None
         Not defined for KCI.
 
+    Raises
+    ------
+    ValueError
+        If ``epsilon`` is not finite and positive, or an initialization
+        argument is invalid.
+
+    Notes
+    -----
+    X, Y, and each column of Z are standardized before testing. With the
+    default RBF kernels, ``bandwidth="heuristic"`` chooses a width from the
+    sample size and number of conditioning variables, while
+    ``bandwidth="median"`` uses the median distance between observations.
+
+    Internally, KCI removes the kernel relationships explained by Z and
+    computes
+
+    .. math::
+        T_{CI} = \operatorname{Tr}\bigl(\tilde{K}_{\ddot{X}|Z}\tilde{K}_{Y|Z}\bigr).
+
+    It approximates the distribution of this statistic under conditional
+    independence with a Gamma distribution and obtains the p-value from the
+    upper tail.
+
     References
     ----------
-    .. [1] Zhang et al. (2011). Kernel-based Conditional Independence Test and Application in
-           Causal Discovery. UAI 2011.
-    .. [2] causal-learn: Causal Discovery in Python.
-           https://causal-learn.readthedocs.io/en/latest/
+    - :footcite:t:`zhang_2011_kci`
     """
 
     _tags = {
@@ -96,6 +118,9 @@ class KCI(HSIC):
         epsilon: float = 1e-3,
         use_cache: bool = True,
     ):
+        if not np.isfinite(epsilon) or epsilon <= 0:
+            raise ValueError("epsilon must be a finite positive number.")
+
         if kernel is None or isinstance(kernel, Kernel):
             kernel_X = kernel_Y = kernel_Z = kernel
         elif isinstance(kernel, tuple) and len(kernel) == 3:
@@ -104,11 +129,12 @@ class KCI(HSIC):
             raise ValueError("kernel must be a sklearn Kernel, a tuple of three Kernels, or None")
 
         super().__init__(data=data, kernel=(kernel_X, kernel_Y), bandwidth=bandwidth, use_cache=use_cache)
+        self.kernel = kernel
         self.kernel_Z_ = kernel_Z
         self.epsilon = epsilon
 
     def _length_scale_kci(self, Z: np.ndarray) -> float:
-        """RBF length-scale for KCI: median heuristic, or piecewise width by sample size [2]."""
+        """Return the median or sample-size-based RBF length-scale for KCI."""
         if self.bandwidth == "median":
             return self._median_width(Z)
         n = Z.shape[0]
@@ -137,7 +163,7 @@ class KCI(HSIC):
         kernel_y = self.kernel_Y_ if self.kernel_Y_ is not None else RBF(length_scale=ls)
         kernel_z = self.kernel_Z_ if self.kernel_Z_ is not None else RBF(length_scale=ls)
 
-        # Augment X with 0.5-scaled Z (causal-learn default [2]).
+        # Augment X with 0.5-scaled Z to match the causal-learn default.
         Kx = self._center_kernel(kernel_x(np.hstack([x, 0.5 * z])))
         Ky = self._center_kernel(kernel_y(y))
         Kz = self._center_kernel(kernel_z(z))
