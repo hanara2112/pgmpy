@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 from skbase.utils.dependencies import _check_soft_dependencies, _safe_import
 from sklearn.base import BaseEstimator, clone
-from sklearn.utils.validation import check_is_fitted
 
 from pgmpy.base import DAG
 from pgmpy.causal_discovery._base import BaseCausalDiscovery
@@ -18,7 +17,7 @@ torch = _safe_import("torch")
 nn = _safe_import("torch.nn")
 
 
-class NormFlow(BaseEstimator):
+class NormFlow(nn.Module):
     """
     Disturbance estimator for the Post-Nonlinear model.
 
@@ -45,67 +44,18 @@ class NormFlow(BaseEstimator):
     """
 
     def __init__(self, hidden_dim=12, n_components=5, max_iter=1000, learning_rate=1e-3, seed=None):
+        super().__init__()
+        _check_soft_dependencies("torch", obj=self)
+
         self.hidden_dim = hidden_dim
         self.n_components = n_components
         self.max_iter = max_iter
         self.learning_rate = learning_rate
         self.seed = seed
 
-    def _post_transform(self, effect):
-        """Evaluate the monotone post-transform and its positive derivative."""
-        input_weight = torch.nn.functional.softplus(self.post_input_weight_)
-        output_weight = torch.nn.functional.softplus(self.post_output_weight_)
-        slope = torch.nn.functional.softplus(self.post_slope_) + 1e-4
-
-        hidden = torch.tanh(effect * input_weight + self.post_bias_)
-        transformed = self.post_intercept_ + slope * effect + hidden @ output_weight.T
-        derivative = slope + ((1.0 - hidden**2) * input_weight * output_weight).sum(dim=1, keepdim=True)
-        return transformed, derivative
-
-    def _negative_log_density(self, disturbance):
-        """Evaluate the learned Gaussian-mixture negative log density."""
-        scale = torch.nn.functional.softplus(self.noise_scale_) + 1e-4
-        standardized = (disturbance - self.noise_mean_) / scale
-
-        component_log_prob = -0.5 * standardized**2 - torch.log(scale) - 0.5 * math.log(2.0 * math.pi)
-        log_weight = torch.log_softmax(self.noise_logits_, dim=0)
-        return -torch.logsumexp(component_log_prob + log_weight, dim=1).mean()
-
-    def fit(self, X, y=None):
-        """
-        Fit the disturbance estimator.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, 2)
-            Data in ``[cause, effect]`` column order.
-
-        y : ignored
-            Present for scikit-learn compatibility.
-
-        Returns
-        -------
-        self : NormFlow
-            The fitted estimator.
-        """
-        _check_soft_dependencies("torch", obj=self)
-
-        X = np.asarray(X, dtype=float)
-        if X.ndim != 2 or X.shape[1] != 2:
-            raise ValueError(f"NormFlow expects a 2-column array, got shape {X.shape}.")
         if self.hidden_dim < 1 or self.n_components < 1 or self.max_iter < 1:
             raise ValueError("hidden_dim, n_components, and max_iter must all be positive integers.")
 
-        self.mean_ = X.mean(axis=0)
-        self.scale_ = X.std(axis=0)
-        if np.any(self.scale_ == 0):
-            raise ValueError("NormFlow requires non-constant cause and effect columns.")
-
-        standardized = (X - self.mean_) / self.scale_
-        cause_t = torch.tensor(standardized[:, 0:1], dtype=torch.float32)
-        effect_t = torch.tensor(standardized[:, 1:2], dtype=torch.float32)
-
-        # Keep a seeded fit from changing PyTorch's process-wide random state.
         seed_context = torch.random.fork_rng(devices=[]) if self.seed is not None else nullcontext()
         with seed_context:
             if self.seed is not None:
@@ -128,29 +78,94 @@ class NormFlow(BaseEstimator):
             self.noise_mean_ = nn.Parameter(torch.linspace(-1.0, 1.0, self.n_components))
             self.noise_scale_ = nn.Parameter(torch.zeros(self.n_components))
 
-            parameters = list(self.inner_model_.parameters()) + [
-                self.post_input_weight_,
-                self.post_output_weight_,
-                self.post_bias_,
-                self.post_slope_,
-                self.post_intercept_,
-                self.noise_logits_,
-                self.noise_mean_,
-                self.noise_scale_,
-            ]
-            optimizer = torch.optim.Adam(parameters, lr=self.learning_rate)
+        self.register_buffer("mean_", torch.zeros(2))
+        self.register_buffer("scale_", torch.ones(2))
+        self.register_buffer("fitted_", torch.tensor(False))
 
-            for _ in range(self.max_iter):
-                optimizer.zero_grad()
-                transformed_effect, derivative = self._post_transform(effect_t)
-                disturbance = transformed_effect - self.inner_model_(cause_t)
-                loss = self._negative_log_density(disturbance) - torch.log(derivative).mean()
-                if not torch.isfinite(loss):
-                    raise ValueError("PNL optimization produced a non-finite loss.")
-                loss.backward()
-                optimizer.step()
+    def _post_transform(self, effect):
+        """Evaluate the monotone post-transform and its positive derivative."""
+        input_weight = torch.nn.functional.softplus(self.post_input_weight_)
+        output_weight = torch.nn.functional.softplus(self.post_output_weight_)
+        slope = torch.nn.functional.softplus(self.post_slope_) + 1e-4
 
-            self.loss_ = float(loss.detach())
+        hidden = torch.tanh(effect * input_weight + self.post_bias_)
+        transformed = self.post_intercept_ + slope * effect + hidden @ output_weight.T
+        derivative = slope + ((1.0 - hidden**2) * input_weight * output_weight).sum(dim=1, keepdim=True)
+        return transformed, derivative
+
+    def _negative_log_density(self, disturbance):
+        """Evaluate the learned Gaussian-mixture negative log density."""
+        scale = torch.nn.functional.softplus(self.noise_scale_) + 1e-4
+        standardized = (disturbance - self.noise_mean_) / scale
+
+        component_log_prob = -0.5 * standardized**2 - torch.log(scale) - 0.5 * math.log(2.0 * math.pi)
+        log_weight = torch.log_softmax(self.noise_logits_, dim=0)
+        return -torch.logsumexp(component_log_prob + log_weight, dim=1).mean()
+
+    def forward(self, X):
+        """Estimate disturbances for a two-column tensor."""
+        if not self.fitted_.item():
+            raise RuntimeError("NormFlow must be fitted before calling forward.")
+
+        X = torch.as_tensor(X, dtype=self.mean_.dtype, device=self.mean_.device)
+        if X.ndim != 2 or X.shape[1] != 2:
+            raise ValueError(f"NormFlow expects a 2-column tensor, got shape {tuple(X.shape)}.")
+
+        standardized = (X - self.mean_) / self.scale_
+        cause = standardized[:, 0:1]
+        effect = standardized[:, 1:2]
+        transformed_effect, _ = self._post_transform(effect)
+        return transformed_effect - self.inner_model_(cause)
+
+    def fit(self, X, y=None):
+        """
+        Fit the disturbance estimator.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, 2)
+            Data in ``[cause, effect]`` column order.
+
+        y : ignored
+            Present for scikit-learn compatibility.
+
+        Returns
+        -------
+        self : NormFlow
+            The fitted estimator.
+        """
+        X = np.array(X, dtype=float, copy=True, order="C")
+        if X.ndim != 2 or X.shape[1] != 2:
+            raise ValueError(f"NormFlow expects a 2-column array, got shape {X.shape}.")
+
+        mean = X.mean(axis=0)
+        scale = X.std(axis=0)
+        if np.any(scale == 0):
+            raise ValueError("NormFlow requires non-constant cause and effect columns.")
+
+        with torch.no_grad():
+            self.mean_.copy_(torch.as_tensor(mean, dtype=self.mean_.dtype, device=self.mean_.device))
+            self.scale_.copy_(torch.as_tensor(scale, dtype=self.scale_.dtype, device=self.scale_.device))
+            self.fitted_.fill_(False)
+
+        X_t = torch.tensor(X, dtype=self.mean_.dtype, device=self.mean_.device)
+        standardized = (X_t - self.mean_) / self.scale_
+        cause_t = standardized[:, 0:1]
+        effect_t = standardized[:, 1:2]
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+
+        for _ in range(self.max_iter):
+            optimizer.zero_grad()
+            transformed_effect, derivative = self._post_transform(effect_t)
+            disturbance = transformed_effect - self.inner_model_(cause_t)
+            loss = self._negative_log_density(disturbance) - torch.log(derivative).mean()
+            if not torch.isfinite(loss):
+                raise ValueError("PNL optimization produced a non-finite loss.")
+            loss.backward()
+            optimizer.step()
+
+        self.loss_ = float(loss.detach())
+        self.fitted_.fill_(True)
         return self
 
     def predict(self, X):
@@ -167,17 +182,13 @@ class NormFlow(BaseEstimator):
         disturbance : np.ndarray of shape (n_samples,)
             Estimated disturbance values.
         """
-        check_is_fitted(self, attributes=["inner_model_", "mean_", "scale_"])
-        X = np.asarray(X, dtype=float)
+        X = np.array(X, dtype=float, copy=True, order="C")
         if X.ndim != 2 or X.shape[1] != 2:
             raise ValueError(f"NormFlow expects a 2-column array, got shape {X.shape}.")
 
-        standardized = (X - self.mean_) / self.scale_
-        cause_t = torch.tensor(standardized[:, 0:1], dtype=torch.float32)
-        effect_t = torch.tensor(standardized[:, 1:2], dtype=torch.float32)
+        X_t = torch.tensor(X, dtype=self.mean_.dtype, device=self.mean_.device)
         with torch.no_grad():
-            transformed_effect, _ = self._post_transform(effect_t)
-            disturbance = transformed_effect - self.inner_model_(cause_t)
+            disturbance = self(X_t)
         return disturbance.cpu().numpy().ravel()
 
 
@@ -308,7 +319,7 @@ class PNL(BaseCausalDiscovery):
         self,
         direction_data: pd.DataFrame,
         score_fn: Callable[[np.typing.ArrayLike, np.typing.ArrayLike], float],
-    ) -> tuple[float, BaseEstimator]:
+    ) -> tuple[float, BaseEstimator | nn.Module]:
         """Fit and score one candidate direction."""
         if self.estimator is None:
             estimator = NormFlow(seed=self.seed)

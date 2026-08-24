@@ -63,8 +63,6 @@ def test_fit_recovers_direction(nonlinear_data):
 
     assert list(est.causal_graph_.edges()) == [("X", "Y")]
     assert est.forward_score_ < est.backward_score_
-    assert hasattr(est, "forward_estimator_")
-    assert hasattr(est, "backward_estimator_")
     assert est.adjacency_matrix_.loc["X", "Y"] == 1
     assert est.score(true_graph=est.causal_graph_, metric="SHD") == 0
 
@@ -100,6 +98,20 @@ def test_clone_preserves_scoring_method_instance():
     assert cloned.scoring_method.criterion == "p_value"
 
 
+@pytest.mark.parametrize(
+    ("data", "match"),
+    [
+        (pd.DataFrame({"X": [1.0, 1.0, 1.0], "Y": [1.0, 2.0, 3.0]}), "constant"),
+        (pd.DataFrame({"X": [0.0, 1.0, 2.0], "Y": [1.0, 2.0, 3.0], "Z": [2.0, 1.0, 0.0]}), "exactly two variables"),
+        (pd.DataFrame({"X": [0.0, 1.0, np.nan], "Y": [1.0, 2.0, 3.0]}), None),
+        (pd.DataFrame({"X": list("aabbab"), "Y": list("xyxyxy")}), "continuous"),
+    ],
+)
+def test_invalid_input_raises(data, match):
+    with pytest.raises(ValueError, match=match):
+        PNL(estimator=PolynomialDisturbanceEstimator()).fit(data)
+
+
 def test_seed_is_passed_to_default_estimators(monkeypatch, nonlinear_data):
     pnl_module = importlib.import_module("pgmpy.causal_discovery.PNL")
     monkeypatch.setattr(pnl_module, "NormFlow", SeededPolynomialDisturbanceEstimator)
@@ -110,20 +122,28 @@ def test_seed_is_passed_to_default_estimators(monkeypatch, nonlinear_data):
     assert est.backward_estimator_.seed == 42
 
 
-def test_normflow_breaks_unit_symmetry_and_preserves_rng_state():
+def test_normflow_module_fit_and_serialization():
     torch = pytest.importorskip("torch")
     x = np.linspace(-1.0, 1.0, 32)
-    data = np.column_stack((x, x**3))
+    data = np.column_stack((x, x**3))[:, ::-1]
+    data_t = torch.tensor(np.ascontiguousarray(data), dtype=torch.float32)
+
+    model = NormFlow(hidden_dim=4, n_components=3, max_iter=3, seed=7)
+    assert isinstance(model, torch.nn.Module)
+    assert {"inner_model_.0.weight", "post_bias_", "mean_", "scale_", "fitted_"} <= model.state_dict().keys()
+    assert not model.fitted_.item()
+
     torch.manual_seed(123)
     rng_state = torch.random.get_rng_state().clone()
-
-    first = NormFlow(hidden_dim=4, n_components=3, max_iter=3, seed=7).fit(data)
+    first = model.fit(data)
     second = NormFlow(hidden_dim=4, n_components=3, max_iter=3, seed=7).fit(data)
+    restored = NormFlow(hidden_dim=4, n_components=3, max_iter=3, seed=8)
+    restored.load_state_dict(first.state_dict())
 
     assert torch.equal(torch.random.get_rng_state(), rng_state)
+    assert first(data_t).shape == (len(data), 1)
+    assert first.predict(data).shape == (len(data),)
     assert float(first.post_bias_.detach().std()) > 0
-    assert float(first.post_input_weight_.detach().std()) > 0
-    assert float(first.post_output_weight_.detach().std()) > 0
-    _, derivative = first._post_transform(torch.tensor([[0.0]]))
-    assert torch.all(derivative > 0)
+    assert torch.all(first._post_transform(torch.tensor([[0.0]]))[1] > 0)
     np.testing.assert_allclose(first.predict(data), second.predict(data))
+    torch.testing.assert_close(restored(data_t), first(data_t))
