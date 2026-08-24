@@ -30,12 +30,13 @@ def _rank_to_standard_normal(values):
 
 class BQCD(BaseCausalDiscovery):
     """
-    Bivariate Quantile Causal Discovery (bQCD) (Tagasovska et al., 2020).
+    Bivariate Quantile Causal Discovery (bQCD) :cite:p:`tagasovska_2020`.
 
     Given two continuous variables, BQCD orients the edge by comparing
     integrated quantile scores of the marginal and conditional
     distributions in each direction. The preferred causal direction is the one
-    with the lower total score.
+    with the lower total score. Equal or non-finite scores cannot determine a
+    direction.
 
     Assumptions:
 
@@ -89,6 +90,9 @@ class BQCD(BaseCausalDiscovery):
         Integrated marginal and conditional scores used to form both direction
         scores.
 
+    quantile_levels_ : np.ndarray
+        Quantile levels used for the integral approximation.
+
     n_features_in_ : int
         The number of features in the data used to learn the causal graph.
 
@@ -101,16 +105,15 @@ class BQCD(BaseCausalDiscovery):
     >>> import pandas as pd
     >>> from pgmpy.causal_discovery import BQCD
     >>> rng = np.random.default_rng(0)
-    >>> x = rng.normal(size=800)
-    >>> y = x + (0.1 + 2.0 * np.abs(x)) * rng.normal(size=800)
+    >>> x = rng.normal(size=200)
+    >>> y = x + (0.05 + 2.0 * x**2) * rng.normal(size=200)
     >>> bqcd = BQCD(n_quantiles=3, seed=0).fit(pd.DataFrame({"X": x, "Y": y}))
     >>> list(bqcd.causal_graph_.edges())
     [('X', 'Y')]
 
     References
     ----------
-    - Tagasovska, N., Chavez-Demoulin, V., and Vatter, T. Distinguishing cause
-      from effect using quantiles: bivariate quantile causal discovery. ICML, 2020.
+    - :cite:p:`tagasovska_2020`
     """
 
     def __init__(self, n_quantiles=3, quantile_regressor=None, seed=None):
@@ -214,11 +217,19 @@ class BQCD(BaseCausalDiscovery):
         if not np.isfinite(list(self.score_components_.values())).all():
             raise ValueError("BQCD produced non-finite quantile scores.")
         marginal_score = marginal_x + marginal_y
-        self.forward_score_ = (marginal_x + conditional_y_given_x) / marginal_score
-        self.backward_score_ = (marginal_y + conditional_x_given_y) / marginal_score
+        forward_score = (marginal_x + conditional_y_given_x) / marginal_score
+        backward_score = (marginal_y + conditional_x_given_y) / marginal_score
+        if forward_score == backward_score:
+            raise ValueError(
+                "BQCD could not determine a causal direction because both directions produced the same score: "
+                f"{forward_score!r}."
+            )
+
+        self.forward_score_ = forward_score
+        self.backward_score_ = backward_score
 
         # Step 7: Select the lower-scoring direction and construct its graph.
-        edge = (x_name, y_name) if self.forward_score_ <= self.backward_score_ else (y_name, x_name)
+        edge = (x_name, y_name) if self.forward_score_ < self.backward_score_ else (y_name, x_name)
         self.causal_graph_ = DAG([edge])
         self.adjacency_matrix_ = nx.to_pandas_adjacency(
             self.causal_graph_, nodelist=[x_name, y_name], weight=None, dtype="int"
