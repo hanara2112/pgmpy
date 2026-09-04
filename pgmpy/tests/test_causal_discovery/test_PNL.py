@@ -147,3 +147,35 @@ def test_normflow_module_fit_and_serialization():
     assert torch.all(first._post_transform(torch.tensor([[0.0]]))[1] > 0)
     np.testing.assert_allclose(first.predict(data), second.predict(data))
     torch.testing.assert_close(restored(data_t), first(data_t))
+
+
+class PostNonlinearDisturbanceEstimator(BaseEstimator):
+    """Estimator that inverts post-nonlinearity g(Y) before extracting additive disturbance."""
+
+    def fit(self, X, y=None):
+        X = np.asarray(X)
+        y_inv = X[:, 1] ** 3
+        self.function_ = np.polynomial.Polynomial.fit(X[:, 0], y_inv, deg=3)
+        return self
+
+    def predict(self, X):
+        X = np.asarray(X)
+        y_inv = X[:, 1] ** 3
+        return y_inv - self.function_(X[:, 0])
+
+
+def test_post_nonlinear_data():
+    """Verify PNL direction recovery when explicit post-nonlinearity g(z) != z is applied."""
+    rng = np.random.default_rng(0)
+    x = rng.uniform(-2.0, 2.0, 500)
+    z = x**3 + 0.2 * rng.normal(size=x.size)
+    y = np.cbrt(z)  # Non-trivial post-nonlinear transformation g(z) = z^(1/3)
+    data = pd.DataFrame({"X": x, "Y": y})
+
+    est = PNL(
+        estimator=PostNonlinearDisturbanceEstimator(),
+        scoring_method=_squared_dependence_score,
+    ).fit(data)
+
+    assert list(est.causal_graph_.edges()) == [("X", "Y")]
+    assert est.forward_score_ < est.backward_score_
