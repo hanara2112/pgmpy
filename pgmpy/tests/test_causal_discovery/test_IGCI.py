@@ -125,3 +125,25 @@ def test_incompatible_score_instance_raises(nonlinear_data):
 def test_invalid_input_raises(estimator, data, match):
     with pytest.raises(ValueError, match=match):
         estimator.fit(data)
+
+
+def test_non_monotonic_function():
+    """IGCI relies on monotonicity; non-monotonic symmetric relation Y = X^2 violates assumptions."""
+    rng = np.random.default_rng(0)
+    x = rng.uniform(-1, 1, 500)
+    y = x**2 + rng.normal(0, 1e-3, 500)
+    data = pd.DataFrame({"X": x, "Y": y})
+
+    est = IGCI().fit(data)
+    assert hasattr(est, "forward_score_") and hasattr(est, "backward_score_")
+
+
+def test_high_noise_data():
+    """IGCI assumes near-deterministic data; high noise degrades causal direction score difference."""
+    rng = np.random.default_rng(0)
+    x = rng.uniform(0, 1, 500)
+    y = x**3 + rng.normal(0, 1.0, 500)
+    data = pd.DataFrame({"X": x, "Y": y})
+
+    est = IGCI().fit(data)
+    assert hasattr(est, "forward_score_") and hasattr(est, "backward_score_")
