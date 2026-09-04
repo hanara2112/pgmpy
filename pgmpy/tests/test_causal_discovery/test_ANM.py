@@ -88,3 +88,25 @@ def test_clone_preserves_score_instance():
 def test_invalid_input_raises(data, match):
     with pytest.raises(ValueError, match=match):
         ANM().fit(data)
+
+
+def test_linear_gaussian_non_identifiability():
+    """Linear relation with Gaussian noise makes ANM non-identifiable (forward and backward scores are close/tied)."""
+    rng = np.random.default_rng(42)
+    x = rng.normal(0, 1, 1000)
+    y = 2.0 * x + rng.normal(0, 0.5, 1000)
+    data = pd.DataFrame({"X": x, "Y": y})
+
+    est = ANM().fit(data)
+    assert abs(est.forward_score_ - est.backward_score_) < 0.05
+
+
+def test_non_additive_noise_violation():
+    """Multiplicative noise Y = X * N violates the additive noise assumption."""
+    rng = np.random.default_rng(42)
+    x = rng.uniform(1, 3, 1000)
+    y = x * rng.uniform(0.5, 2, 1000)
+    data = pd.DataFrame({"X": x, "Y": y})
+
+    est = ANM().fit(data)
+    assert hasattr(est, "forward_score_") and hasattr(est, "backward_score_")
