@@ -134,3 +134,14 @@ def test_numpy_integer_n_quantiles():
     est = BQCD(n_quantiles=np.int64(2), seed=0).fit(_nonlinear_data())
 
     assert len(est.quantile_levels_) == 2
+
+
+def test_homoscedastic_data():
+    """BQCD relies on heteroscedastic noise; homoscedastic noise produces near-zero or tied score differences."""
+    rng = np.random.default_rng(0)
+    x = rng.normal(size=200)
+    y = x + rng.normal(size=200)  # Homoscedastic noise: constant noise variance
+    data = pd.DataFrame({"X": x, "Y": y})
+
+    est = BQCD(n_quantiles=3, seed=0).fit(data)
+    assert hasattr(est, "forward_score_") and hasattr(est, "backward_score_")
